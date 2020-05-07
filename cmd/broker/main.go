@@ -11,9 +11,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/DrmagicE/gmqtt"
-	"github.com/DrmagicE/gmqtt/plugin/management"
-	"github.com/DrmagicE/gmqtt/plugin/prometheus"
+	"github.com/danclive/gmqtt"
+	"github.com/danclive/gmqtt/plugin/management"
+	"github.com/danclive/gmqtt/plugin/prometheus"
 )
 
 func main() {

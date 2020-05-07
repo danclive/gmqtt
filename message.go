@@ -1,7 +1,7 @@
 package gmqtt
 
 import (
-	"github.com/DrmagicE/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/pkg/packets"
 )
 
 // msg is the implementation of Message interface

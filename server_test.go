@@ -10,7 +10,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/DrmagicE/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/pkg/packets"
 )
 
 func TestHooks(t *testing.T) {

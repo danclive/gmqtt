@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/DrmagicE/gmqtt"
-	"github.com/DrmagicE/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt"
+	"github.com/danclive/gmqtt/pkg/packets"
 	"github.com/gin-gonic/gin"
 )
 

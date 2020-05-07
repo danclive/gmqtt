@@ -3,8 +3,8 @@ package gmqtt
 import (
 	"sync/atomic"
 
-	"github.com/DrmagicE/gmqtt/pkg/packets"
-	"github.com/DrmagicE/gmqtt/subscription"
+	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/subscription"
 )
 
 // StatsManager interface provides the ability to access the statistics of the server

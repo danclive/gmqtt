@@ -1,7 +1,7 @@
 package gmqtt
 
 import (
-	"github.com/DrmagicE/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/pkg/packets"
 )
 
 // PublishService provides the ability to publish messages to the broker.

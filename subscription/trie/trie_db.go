@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrmagicE/gmqtt/pkg/packets"
-	"github.com/DrmagicE/gmqtt/subscription"
+	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/subscription"
 )
 
 // trieDB implement the subscription.Interface, it use trie tree  to store topics.

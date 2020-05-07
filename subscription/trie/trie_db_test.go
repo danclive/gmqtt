@@ -3,10 +3,9 @@ package trie
 import (
 	"testing"
 
+	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt/subscription"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/DrmagicE/gmqtt/pkg/packets"
-	"github.com/DrmagicE/gmqtt/subscription"
 )
 
 func TestTrieDB_UnsubscribeAll(t *testing.T) {

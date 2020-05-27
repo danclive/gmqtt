@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 func main() {
@@ -19,14 +19,14 @@ func main() {
 		fmt.Println(err.Error())
 		return
 	}
-	srv := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
+	srv := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
 	)
 
 	// subscription store
 	subStore := srv.SubscriptionStore()
-	srv.Init(gmqtt.WithHook(gmqtt.Hooks{
-		OnConnected: func(ctx context.Context, client gmqtt.Client) {
+	srv.Init(mqtt.WithHook(mqtt.Hooks{
+		OnConnected: func(ctx context.Context, client mqtt.Client) {
 			// add subscription for a client when it is connected
 			subStore.Subscribe(client.OptionsReader().ClientID(), packets.Topic{
 				Qos:  packets.QOS_0,
@@ -38,7 +38,7 @@ func main() {
 	// retained store
 	retainedStore := srv.RetainedStore()
 	// add a retained message
-	retainedStore.AddOrReplace(gmqtt.NewMessage("a/b/c", []byte("abc"), packets.QOS_1, gmqtt.Retained(true)))
+	retainedStore.AddOrReplace(mqtt.NewMessage("a/b/c", []byte("abc"), packets.QOS_1, mqtt.Retained(true)))
 
 	// publish service
 	pub := srv.PublishService()
@@ -54,7 +54,7 @@ func main() {
 				return true
 			})
 			// publish a message to the broker
-			pub.Publish(gmqtt.NewMessage("topic", []byte("abc"), packets.QOS_1))
+			pub.Publish(mqtt.NewMessage("topic", []byte("abc"), packets.QOS_1))
 		}
 
 	}()

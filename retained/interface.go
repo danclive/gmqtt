@@ -1,18 +1,18 @@
 package retained
 
 import (
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 // IterateFn is the callback function used by Iterate()
 // Return false means to stop the iteration.
 type IterateFn func(message packets.Message) bool
 
-// Store is the interface used by gmqtt.server and external logic to handler the operations of retained messages.
-// User can get the implementation from gmqtt.Server interface.
+// Store is the interface used by mqtt.server and external logic to handler the operations of retained messages.
+// User can get the implementation from mqtt.Server interface.
 // This interface provides the ability for extensions to interact with the retained message store.
 // Notice:
-// This methods will not trigger any gmqtt hooks.
+// This methods will not trigger any mqtt hooks.
 type Store interface {
 	// GetRetainedMessage returns the message that equals the passed topic.
 	GetRetainedMessage(topicName string) packets.Message

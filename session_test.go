@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 const testMaxInflightLen = 20

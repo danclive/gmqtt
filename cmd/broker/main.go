@@ -11,9 +11,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/plugin/management"
-	"github.com/danclive/gmqtt/plugin/prometheus"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/plugin/management"
+	"github.com/danclive/mqtt/plugin/prometheus"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		log.Fatalln(err.Error())
 		return
 	}
-	ws := &gmqtt.WsServer{
+	ws := &mqtt.WsServer{
 		Server: &http.Server{Addr: ":8080"},
 		Path:   "/ws",
 	}
@@ -33,14 +33,14 @@ func main() {
 
 	l, _ := zap.NewProduction()
 	//l, _ := zap.NewDevelopment()
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
-		gmqtt.WithWebsocketServer(ws),
-		gmqtt.WithPlugin(management.New(":8081", nil)),
-		gmqtt.WithPlugin(prometheus.New(&http.Server{
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
+		mqtt.WithWebsocketServer(ws),
+		mqtt.WithPlugin(management.New(":8081", nil)),
+		mqtt.WithPlugin(prometheus.New(&http.Server{
 			Addr: ":8082",
 		}, "/metrics")),
-		gmqtt.WithLogger(l),
+		mqtt.WithLogger(l),
 	)
 	s.Run()
 	signalCh := make(chan os.Signal, 1)

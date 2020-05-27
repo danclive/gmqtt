@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 // HookWrapper groups all hook wrappers function
 type HookWrapper struct {

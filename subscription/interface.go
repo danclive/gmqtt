@@ -1,7 +1,7 @@
 package subscription
 
 import (
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 // IterateFn is the callback function used by Iterate()
@@ -28,11 +28,11 @@ type Stats struct {
 // ClientTopics groups the topics by client id.
 type ClientTopics map[string][]packets.Topic
 
-// Store is the interface used by gmqtt.server and external logic to handler the operations of subscriptions.
-// User can get the implementation from gmqtt.Server interface.
+// Store is the interface used by mqtt.server and external logic to handler the operations of subscriptions.
+// User can get the implementation from mqtt.Server interface.
 // This interface provides the ability for extensions to interact with the subscriptions.
 // Notice:
-// This methods will not trigger any gmqtt hooks.
+// This methods will not trigger any mqtt hooks.
 type Store interface {
 	// Subscribe add subscriptions to a specific client.
 	// Notice:

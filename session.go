@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"container/list"
@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 type session struct {

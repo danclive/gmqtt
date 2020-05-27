@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/danclive/gmqtt"
+	"github.com/danclive/mqtt"
 )
 
 func main() {
@@ -20,19 +20,19 @@ func main() {
 		return
 	}
 
-	ws := &gmqtt.WsServer{
+	ws := &mqtt.WsServer{
 		Server: &http.Server{Addr: ":8080"},
 		Path:   "/",
 	}
-	wss := &gmqtt.WsServer{
+	wss := &mqtt.WsServer{
 		Server:   &http.Server{Addr: ":8081"},
 		Path:     "/",
 		CertFile: "../testcerts/server.crt",
 		KeyFile:  "../testcerts/server.key",
 	}
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
-		gmqtt.WithWebsocketServer(ws, wss),
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
+		mqtt.WithWebsocketServer(ws, wss),
 	)
 	s.Run()
 	fmt.Println("started...")

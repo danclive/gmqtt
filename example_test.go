@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 	"go.uber.org/zap"
 )
 

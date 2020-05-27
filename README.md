@@ -1,21 +1,21 @@
-[中文文档](https://github.com/DrmagicE/gmqtt/blob/master/README_ZH.md)
-# Gmqtt [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go) [![Build Status](https://travis-ci.org/DrmagicE/gmqtt.svg?branch=master)](https://travis-ci.org/DrmagicE/gmqtt) [![codecov](https://codecov.io/gh/DrmagicE/gmqtt/branch/master/graph/badge.svg)](https://codecov.io/gh/DrmagicE/gmqtt) [![Go Report Card](https://goreportcard.com/badge/github.com/DrmagicE/gmqtt)](https://goreportcard.com/report/github.com/DrmagicE/gmqtt)
+[中文文档](https://github.com/DrmagicE/mqtt/blob/master/README_ZH.md)
+# mqtt [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go) [![Build Status](https://travis-ci.org/DrmagicE/mqtt.svg?branch=master)](https://travis-ci.org/DrmagicE/mqtt) [![codecov](https://codecov.io/gh/DrmagicE/mqtt/branch/master/graph/badge.svg)](https://codecov.io/gh/DrmagicE/mqtt) [![Go Report Card](https://goreportcard.com/badge/github.com/DrmagicE/mqtt)](https://goreportcard.com/report/github.com/DrmagicE/mqtt)
 
-Gmqtt provides:
+mqtt provides:
 *  MQTT broker that fully implements the MQTT protocol V3.1.1.
 *  Golang MQTT broker package for secondary development.
 *  MQTT protocol pack/unpack package for implementing MQTT clients or testing.
 
 # Installation
-```$ go get -u github.com/DrmagicE/gmqtt```
+```$ go get -u github.com/DrmagicE/mqtt```
 
 # Features
 * Provide hook method to customized the broker behaviours(Authentication, ACL, etc..). See `hooks.go` for more details
 * Support tls/ssl and websocket
 * Enable user to write plugins. See `plugin.go` and `/plugin` for more details.
 * Provide abilities for extensions to interact with the server. See `Server` interface in `server.go`  and `example_test.go` for more details.
-* Provide metrics (by using Prometheus). (plugin: [prometheus](https://github.com/DrmagicE/gmqtt/blob/master/plugin/prometheus/README.md))
-* Provide restful API to interact with server. (plugin:[management](https://github.com/DrmagicE/gmqtt/blob/master/plugin/management/README.md))
+* Provide metrics (by using Prometheus). (plugin: [prometheus](https://github.com/DrmagicE/mqtt/blob/master/plugin/prometheus/README.md))
+* Provide restful API to interact with server. (plugin:[management](https://github.com/DrmagicE/mqtt/blob/master/plugin/management/README.md))
 
 # Limitations
 * The retained messages are not persisted when the server exit.
@@ -30,14 +30,14 @@ $ go run main.go
 ```
 The broker will listen on port 1883 for TCP and 8080 for websocket.
 The broker loads the following plugins:
- * [management](https://github.com/DrmagicE/gmqtt/blob/master/plugin/management/README.md): Listens on port `8081`, provides restful api service
- * [prometheus](https://github.com/DrmagicE/gmqtt/blob/master/plugin/prometheus/README.md): Listens on port `8082`, serve as a prometheus exporter with `/metrics` path.
+ * [management](https://github.com/DrmagicE/mqtt/blob/master/plugin/management/README.md): Listens on port `8081`, provides restful api service
+ * [prometheus](https://github.com/DrmagicE/mqtt/blob/master/plugin/prometheus/README.md): Listens on port `8082`, serve as a prometheus exporter with `/metrics` path.
 
 
 ## Docker
 ```
-$ docker build -t gmqtt .
-$ docker run -p 1883:1883 -p  8081:8081 -p 8082:8082 gmqtt
+$ docker build -t mqtt .
+$ docker run -p 1883:1883 -p  8081:8081 -p 8082:8082 mqtt
 ```
 ## Build with external source code
 The features of build-in MQTT broker are not rich enough.It is not implementing some features such as Authentication, ACL etc..
@@ -51,7 +51,7 @@ func main() {
 		return
 	}
 	// websocket server
-	ws := &gmqtt.WsServer{
+	ws := &mqtt.WsServer{
 		Server: &http.Server{Addr: ":8080"},
 		Path:   "/ws",
 	}
@@ -61,15 +61,15 @@ func main() {
 
 	l, _ := zap.NewProduction()
 	// l, _ := zap.NewDevelopment()
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
-		gmqtt.WithWebsocketServer(ws),
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
+		mqtt.WithWebsocketServer(ws),
 		// Add your plugins
-		gmqtt.WithPlugin(management.New(":8081", nil)),
-		gmqtt.WithPlugin(prometheus.New(&http.Server{
+		mqtt.WithPlugin(management.New(":8081", nil)),
+		mqtt.WithPlugin(prometheus.New(&http.Server{
 			Addr: ":8082",
 		}, "/metrics")),
-		gmqtt.WithLogger(l),
+		mqtt.WithLogger(l),
 	)
 
 	s.Run()
@@ -82,11 +82,11 @@ func main() {
 See `/examples` for more details.
 
 # Documentation
-[godoc](https://www.godoc.org/github.com/DrmagicE/gmqtt)
+[godoc](https://www.godoc.org/github.com/DrmagicE/mqtt)
 ## Hooks
-Gmqtt implements the following hooks:
+mqtt implements the following hooks:
 * OnAccept  (Only for tcp/ssl, not for ws/wss)
-* OnConnect 
+* OnConnect
 * OnConnected
 * OnSessionCreated
 * OnSessionResumed

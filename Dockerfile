@@ -1,7 +1,7 @@
 FROM golang:latest
 
-ADD . /go/src/github.com/DrmagicE/gmqtt
-WORKDIR /go/src/github.com/DrmagicE/gmqtt/cmd/broker
+ADD . /go/src/github.com/danclive/mqtt
+WORKDIR /go/src/github.com/danclive/mqtt/cmd/broker
 
 ENV GO111MODULE on
 #ENV GOPROXY https://goproxy.cn

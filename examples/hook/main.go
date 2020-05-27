@@ -9,8 +9,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 var validUserMu sync.Mutex
@@ -42,7 +42,7 @@ func main() {
 	}
 
 	//authentication
-	onConnect := func(ctx context.Context, client gmqtt.Client) (code uint8) {
+	onConnect := func(ctx context.Context, client mqtt.Client) (code uint8) {
 		username := client.OptionsReader().Username()
 		password := client.OptionsReader().Password()
 		if validateUser(username, password) {
@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// acl
-	onSubscribe := func(ctx context.Context, client gmqtt.Client, topic packets.Topic) (qos uint8) {
+	onSubscribe := func(ctx context.Context, client mqtt.Client, topic packets.Topic) (qos uint8) {
 		if client.OptionsReader().Username() == "root" {
 			return topic.Qos
 		}
@@ -73,7 +73,7 @@ func main() {
 		}
 		return topic.Qos
 	}
-	onMsgArrived := func(ctx context.Context, client gmqtt.Client, msg packets.Message) (valid bool) {
+	onMsgArrived := func(ctx context.Context, client mqtt.Client, msg packets.Message) (valid bool) {
 		if client.OptionsReader().Username() == "subscribeonly" {
 			client.Close()
 			return false
@@ -84,16 +84,16 @@ func main() {
 		}
 		return true
 	}
-	onClose := func(ctx context.Context, client gmqtt.Client, err error) {
+	onClose := func(ctx context.Context, client mqtt.Client, err error) {
 		log.Println("client id:"+client.OptionsReader().ClientID()+"is closed with error:", err)
 	}
 	onStop := func(ctx context.Context) {
 		log.Println("stop")
 	}
-	onDeliver := func(ctx context.Context, client gmqtt.Client, msg packets.Message) {
+	onDeliver := func(ctx context.Context, client mqtt.Client, msg packets.Message) {
 		log.Printf("delivering message %s to client %s", msg.Payload(), client.OptionsReader().ClientID())
 	}
-	hooks := gmqtt.Hooks{
+	hooks := mqtt.Hooks{
 		OnConnect:    onConnect,
 		OnSubscribe:  onSubscribe,
 		OnMsgArrived: onMsgArrived,
@@ -102,9 +102,9 @@ func main() {
 		OnDeliver:    onDeliver,
 	}
 
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
-		gmqtt.WithHook(hooks),
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
+		mqtt.WithHook(hooks),
 	)
 
 	log.Println("started...")

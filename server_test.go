@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 func TestHooks(t *testing.T) {

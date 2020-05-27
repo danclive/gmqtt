@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/danclive/gmqtt"
+	"github.com/danclive/mqtt"
 )
 
 func main() {
@@ -33,8 +33,8 @@ func main() {
 		log.Fatalln(err.Error())
 		return
 	}
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln, tlsln),
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln, tlsln),
 	)
 	s.Run()
 	fmt.Println("started...")

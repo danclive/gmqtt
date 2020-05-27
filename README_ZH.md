@@ -1,4 +1,4 @@
-# Gmqtt [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go) [![Build Status](https://travis-ci.org/DrmagicE/gmqtt.svg?branch=master)](https://travis-ci.org/DrmagicE/gmqtt) [![codecov](https://codecov.io/gh/DrmagicE/gmqtt/branch/master/graph/badge.svg)](https://codecov.io/gh/DrmagicE/gmqtt) [![Go Report Card](https://goreportcard.com/badge/github.com/DrmagicE/gmqtt)](https://goreportcard.com/report/github.com/DrmagicE/gmqtt)
+# mqtt [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go) [![Build Status](https://travis-ci.org/danclive/mqtt.svg?branch=master)](https://travis-ci.org/danclive/mqtt) [![codecov](https://codecov.io/gh/danclive/mqtt/branch/master/graph/badge.svg)](https://codecov.io/gh/danclive/mqtt) [![Go Report Card](https://goreportcard.com/badge/github.com/danclive/mqtt)](https://goreportcard.com/report/github.com/danclive/mqtt)
 
 # 本库的内容有：
 * 基于Go语言实现的V3.1.1版本的MQTT服务器
@@ -6,15 +6,15 @@
 * MQTT V3.1.1 版本的协议解析库
 
 # 安装
-```$ go get -u github.com/DrmagicE/gmqtt```
+```$ go get -u github.com/danclive/mqtt```
 
 # 功能特性
 * 内置了许多实用的钩子方法，使用者可以方便的定制需要的MQTT服务器（鉴权,ACL等功能）
 * 支持tls/ssl以及ws/wss
 * 定制化插件能力。具体内容可参考`plugin.go` 和 `/plugin/`
 * 暴露服务接口，向外部提供与server交互的能力，详见`server.go`的`Server`接口定义和`example_test.go`。
-* 提供监控指标，目前支持prometheus。 (plugin: [prometheus](https://github.com/DrmagicE/gmqtt/blob/master/plugin/prometheus/READEME.md))
-* restful API支持. (plugin:[management](https://github.com/DrmagicE/gmqtt/blob/master/plugin/management/READEME.md))
+* 提供监控指标，目前支持prometheus。 (plugin: [prometheus](https://github.com/danclive/mqtt/blob/master/plugin/prometheus/READEME.md))
+* restful API支持. (plugin:[management](https://github.com/danclive/mqtt/blob/master/plugin/management/READEME.md))
 
 
 # 缺陷
@@ -27,17 +27,17 @@
 ## 使用内置的MQTT服务器
 下列命令将启动一个监听`1883`端口[tcp]和`8080`端口[websocket]的MQTT服务。
 该broker加载了如下插件:
- * [management](https://github.com/DrmagicE/gmqtt/blob/master/plugin/management/README.md): 监听`8081`端口, 提供restful api服务
- * [prometheus](https://github.com/DrmagicE/gmqtt/blob/master/plugin/prometheus/README.md): 监听`8082`端口, 作为prometheus exporter供prometheus server采集，接口地址为: `/metrics`
+ * [management](https://github.com/danclive/mqtt/blob/master/plugin/management/README.md): 监听`8081`端口, 提供restful api服务
+ * [prometheus](https://github.com/danclive/mqtt/blob/master/plugin/prometheus/README.md): 监听`8082`端口, 作为prometheus exporter供prometheus server采集，接口地址为: `/metrics`
 
 ```
 $ cd cmd/broker
-$ go run main.go 
+$ go run main.go
 ```
 ## Docker
 ```
-$ docker build -t gmqtt .
-$ docker run -p 1883:1883 -p  8081:8081 -p 8082:8082 gmqtt
+$ docker build -t mqtt .
+$ docker run -p 1883:1883 -p  8081:8081 -p 8082:8082 mqtt
 ```
 ## 从外部代码引入
 当前内置的MQTT服务器功能比较弱，鉴权，ACL等功能均没有实现。
@@ -51,7 +51,7 @@ func main() {
 		return
 	}
 	// websocket server
-	ws := &gmqtt.WsServer{
+	ws := &mqtt.WsServer{
 		Server: &http.Server{Addr: ":8080"},
 		Path:   "/ws",
 	}
@@ -61,15 +61,15 @@ func main() {
 
 	l, _ := zap.NewProduction()
 	// l, _ := zap.NewDevelopment()
-	s := gmqtt.NewServer(
-		gmqtt.WithTCPListener(ln),
-		gmqtt.WithWebsocketServer(ws),
+	s := mqtt.NewServer(
+		mqtt.WithTCPListener(ln),
+		mqtt.WithWebsocketServer(ws),
 		// Add your plugins
-		gmqtt.WithPlugin(management.New(":8081", nil)),
-		gmqtt.WithPlugin(prometheus.New(&http.Server{
+		mqtt.WithPlugin(management.New(":8081", nil)),
+		mqtt.WithPlugin(prometheus.New(&http.Server{
 			Addr: ":8082",
 		}, "/metrics")),
-		gmqtt.WithLogger(l),
+		mqtt.WithLogger(l),
 	)
 
 	s.Run()
@@ -83,11 +83,11 @@ func main() {
 
 
 # 文档说明
-[godoc](https://www.godoc.org/github.com/DrmagicE/gmqtt)
+[godoc](https://www.godoc.org/github.com/danclive/mqtt)
 ## 钩子方法
-Gmqtt实现了下列钩子方法
+mqtt实现了下列钩子方法
 * OnAccept  (仅支持在tcp/ssl下,websocket不支持)
-* OnConnect 
+* OnConnect
 * OnConnected
 * OnSessionCreated
 * OnSessionResumed

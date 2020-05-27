@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/pkg/packets"
-	"github.com/danclive/gmqtt/subscription"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/subscription"
 )
 
 const (
@@ -21,7 +21,7 @@ type monitor struct {
 	clientList     *quickList
 	subMu          sync.Mutex
 	subscriptions  map[string]*quickList // key by clientID
-	config         gmqtt.Config
+	config         mqtt.Config
 	subStatsReader subscription.StatsReader
 }
 
@@ -33,7 +33,7 @@ func newMonitor(subStatsReader subscription.StatsReader) *monitor {
 		subStatsReader: subStatsReader,
 	}
 }
-func statusText(client gmqtt.Client) string {
+func statusText(client mqtt.Client) string {
 	if client.IsConnected() {
 		return Online
 	} else {
@@ -192,7 +192,7 @@ func (q *quickList) iterate(fn func(elem *list.Element), offset, n int) error {
 }
 
 // addClient
-func (m *monitor) addClient(client gmqtt.Client) {
+func (m *monitor) addClient(client mqtt.Client) {
 	m.clientMu.Lock()
 	m.clientList.set(client.OptionsReader().ClientID(), client)
 	m.clientMu.Unlock()
@@ -215,7 +215,7 @@ func (m *monitor) GetClientByID(clientID string) (*ClientInfo, error) {
 	}
 	return newClientInfo(client), err
 }
-func newClientInfo(client gmqtt.Client) *ClientInfo {
+func newClientInfo(client mqtt.Client) *ClientInfo {
 	optsReader := client.OptionsReader()
 	rs := &ClientInfo{
 		ClientID:       optsReader.ClientID(),
@@ -235,7 +235,7 @@ func newClientInfo(client gmqtt.Client) *ClientInfo {
 	}
 	return rs
 }
-func (m *monitor) newSessionInfo(client gmqtt.Client, c gmqtt.Config) *SessionInfo {
+func (m *monitor) newSessionInfo(client mqtt.Client, c mqtt.Config) *SessionInfo {
 	optsReader := client.OptionsReader()
 	stats := client.GetSessionStatsManager().GetStats()
 	subStats, _ := m.subStatsReader.GetClientStats(optsReader.ClientID())
@@ -262,9 +262,9 @@ func (m *monitor) newSessionInfo(client gmqtt.Client, c gmqtt.Config) *SessionIn
 	return rs
 }
 
-func (m *monitor) getClientByID(clientID string) (gmqtt.Client, error) {
+func (m *monitor) getClientByID(clientID string) (mqtt.Client, error) {
 	if i, err := m.clientList.getByID(clientID); i != nil {
-		return i.Value.(gmqtt.Client), nil
+		return i.Value.(mqtt.Client), nil
 	} else {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (m *monitor) getClientByID(clientID string) (gmqtt.Client, error) {
 func (m *monitor) GetClients(offset, n int) ([]*ClientInfo, error) {
 	rs := make([]*ClientInfo, 0)
 	fn := func(elem *list.Element) {
-		rs = append(rs, newClientInfo(elem.Value.(gmqtt.Client)))
+		rs = append(rs, newClientInfo(elem.Value.(mqtt.Client)))
 	}
 	m.clientMu.Lock()
 	m.clientList.iterate(fn, offset, n)
@@ -297,7 +297,7 @@ func (m *monitor) GetSessionByID(clientID string) (*SessionInfo, error) {
 func (m *monitor) GetSessions(offset, n int) ([]*SessionInfo, error) {
 	rs := make([]*SessionInfo, 0)
 	fn := func(elem *list.Element) {
-		rs = append(rs, m.newSessionInfo(elem.Value.(gmqtt.Client), m.config))
+		rs = append(rs, m.newSessionInfo(elem.Value.(mqtt.Client), m.config))
 	}
 	m.clientMu.Lock()
 	m.clientList.iterate(fn, offset, n)

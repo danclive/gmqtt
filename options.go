@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"net"

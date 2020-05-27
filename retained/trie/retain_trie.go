@@ -3,8 +3,8 @@ package trie
 import (
 	"strings"
 
-	"github.com/danclive/gmqtt/pkg/packets"
-	"github.com/danclive/gmqtt/retained"
+	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/retained"
 )
 
 // topicTrie

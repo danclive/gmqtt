@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/pkg/packets"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,30 +44,30 @@ func newResponse(result interface{}, pager *Pager, err error) *Response {
 
 type Management struct {
 	monitor *monitor
-	server  gmqtt.Server
+	server  mqtt.Server
 	addr    string
 	user    gin.Accounts //BasicAuth user info,username => password
 }
 
 // OnSessionCreatedWrapper store the client when session created
-func (m *Management) OnSessionCreatedWrapper(created gmqtt.OnSessionCreated) gmqtt.OnSessionCreated {
-	return func(ctx context.Context, client gmqtt.Client) {
+func (m *Management) OnSessionCreatedWrapper(created mqtt.OnSessionCreated) mqtt.OnSessionCreated {
+	return func(ctx context.Context, client mqtt.Client) {
 		m.monitor.addClient(client)
 		created(ctx, client)
 	}
 }
 
 // OnSessionResumedWrapper refresh the client when session resumed
-func (m *Management) OnSessionResumedWrapper(resumed gmqtt.OnSessionResumed) gmqtt.OnSessionResumed {
-	return func(ctx context.Context, client gmqtt.Client) {
+func (m *Management) OnSessionResumedWrapper(resumed mqtt.OnSessionResumed) mqtt.OnSessionResumed {
+	return func(ctx context.Context, client mqtt.Client) {
 		m.monitor.addClient(client)
 		resumed(ctx, client)
 	}
 }
 
 // OnSessionTerminated remove the client when session terminated
-func (m *Management) OnSessionTerminatedWrapper(terminated gmqtt.OnSessionTerminated) gmqtt.OnSessionTerminated {
-	return func(ctx context.Context, client gmqtt.Client, reason gmqtt.SessionTerminatedReason) {
+func (m *Management) OnSessionTerminatedWrapper(terminated mqtt.OnSessionTerminated) mqtt.OnSessionTerminated {
+	return func(ctx context.Context, client mqtt.Client, reason mqtt.SessionTerminatedReason) {
 		m.monitor.deleteClient(client.OptionsReader().ClientID())
 		m.monitor.deleteClientSubscriptions(client.OptionsReader().ClientID())
 		terminated(ctx, client, reason)
@@ -75,22 +75,22 @@ func (m *Management) OnSessionTerminatedWrapper(terminated gmqtt.OnSessionTermin
 }
 
 // OnSubscribedWrapper store the subscription
-func (m *Management) OnSubscribedWrapper(subscribed gmqtt.OnSubscribed) gmqtt.OnSubscribed {
-	return func(ctx context.Context, client gmqtt.Client, topic packets.Topic) {
+func (m *Management) OnSubscribedWrapper(subscribed mqtt.OnSubscribed) mqtt.OnSubscribed {
+	return func(ctx context.Context, client mqtt.Client, topic packets.Topic) {
 		m.monitor.addSubscription(client.OptionsReader().ClientID(), topic)
 		subscribed(ctx, client, topic)
 	}
 }
 
 // OnUnsubscribedWrapper remove the subscription
-func (m *Management) OnUnsubscribedWrapper(unsubscribe gmqtt.OnUnsubscribed) gmqtt.OnUnsubscribed {
-	return func(ctx context.Context, client gmqtt.Client, topicName string) {
+func (m *Management) OnUnsubscribedWrapper(unsubscribe mqtt.OnUnsubscribed) mqtt.OnUnsubscribed {
+	return func(ctx context.Context, client mqtt.Client, topicName string) {
 		m.monitor.deleteSubscription(client.OptionsReader().ClientID(), topicName)
 		unsubscribe(ctx, client, topicName)
 	}
 }
 
-func (m *Management) Load(server gmqtt.Server) error {
+func (m *Management) Load(server mqtt.Server) error {
 	m.monitor = newMonitor(server.SubscriptionStore())
 	m.server = server
 	m.monitor.config = server.GetConfig()
@@ -123,8 +123,8 @@ func (m *Management) Load(server gmqtt.Server) error {
 func (m *Management) Unload() error {
 	return nil
 }
-func (m *Management) HookWrapper() gmqtt.HookWrapper {
-	return gmqtt.HookWrapper{
+func (m *Management) HookWrapper() mqtt.HookWrapper {
+	return mqtt.HookWrapper{
 		OnSessionCreatedWrapper:    m.OnSessionCreatedWrapper,
 		OnSessionResumedWrapper:    m.OnSessionResumedWrapper,
 		OnSessionTerminatedWrapper: m.OnSessionTerminatedWrapper,
@@ -281,7 +281,7 @@ func (m *Management) Publish(c *gin.Context) {
 		c.JSON(http.StatusOK, newResponse(nil, nil, packets.ErrInvalUtf8))
 		return
 	}
-	msg := gmqtt.NewMessage(topic, []byte(payload), uint8(qos), gmqtt.Retained(retain))
+	msg := mqtt.NewMessage(topic, []byte(payload), uint8(qos), mqtt.Retained(retain))
 	m.server.PublishService().Publish(msg)
 	c.JSON(http.StatusOK, newResponse(struct{}{}, nil, nil))
 }

@@ -1,10 +1,10 @@
-package gmqtt
+package mqtt
 
 import (
 	"context"
 	"net"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 type Hooks struct {

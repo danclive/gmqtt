@@ -9,19 +9,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	"github.com/danclive/gmqtt"
-	"github.com/danclive/gmqtt/subscription"
+	"github.com/danclive/mqtt"
+	"github.com/danclive/mqtt/subscription"
 )
 
 const name = "prometheus"
 
 var log *zap.Logger
 
-const metricPrefix = "gmqtt_"
+const metricPrefix = "mqtt_"
 
-// Prometheus served as a prometheus exporter that exposes gmqtt metrics.
+// Prometheus served as a prometheus exporter that exposes mqtt metrics.
 type Prometheus struct {
-	statsManager gmqtt.StatsManager
+	statsManager mqtt.StatsManager
 	httpServer   *http.Server
 	path         string
 }
@@ -34,8 +34,8 @@ func New(httpSever *http.Server, path string) *Prometheus {
 	return p
 }
 
-func (p *Prometheus) Load(service gmqtt.Server) error {
-	log = gmqtt.LoggerWithField(zap.String("plugin", name))
+func (p *Prometheus) Load(service mqtt.Server) error {
+	log = mqtt.LoggerWithField(zap.String("plugin", name))
 	p.statsManager = service.GetStatsManager()
 	r := prometheus.NewPedanticRegistry()
 	r.MustRegister(p)
@@ -53,8 +53,8 @@ func (p *Prometheus) Load(service gmqtt.Server) error {
 func (p *Prometheus) Unload() error {
 	return p.httpServer.Shutdown(context.Background())
 }
-func (p *Prometheus) HookWrapper() gmqtt.HookWrapper {
-	return gmqtt.HookWrapper{}
+func (p *Prometheus) HookWrapper() mqtt.HookWrapper {
+	return mqtt.HookWrapper{}
 }
 func (p *Prometheus) Name() string {
 	return name
@@ -73,7 +73,7 @@ func (p *Prometheus) Collect(m chan<- prometheus.Metric) {
 	collectMessageStats(st.MessageStats, m)
 }
 
-func collectPacketsStats(ps *gmqtt.PacketStats, m chan<- prometheus.Metric) {
+func collectPacketsStats(ps *mqtt.PacketStats, m chan<- prometheus.Metric) {
 	bytesReceivedMetricName := metricPrefix + "packets_received_bytes_total"
 	ReceivedCounterMetricName := metricPrefix + "packets_received_total"
 	bytesSentMetricName := metricPrefix + "packets_sent_bytes_total"
@@ -85,7 +85,7 @@ func collectPacketsStats(ps *gmqtt.PacketStats, m chan<- prometheus.Metric) {
 	collectPacketsStatsCounter(ReceivedCounterMetricName, ps.ReceivedTotal, m)
 	collectPacketsStatsCounter(sentCounterMetricName, ps.SentTotal, m)
 }
-func collectPacketsStatsBytes(metricName string, pb *gmqtt.PacketBytes, m chan<- prometheus.Metric) {
+func collectPacketsStatsBytes(metricName string, pb *mqtt.PacketBytes, m chan<- prometheus.Metric) {
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", []string{"type"}, nil),
 		prometheus.CounterValue,
@@ -171,7 +171,7 @@ func collectPacketsStatsBytes(metricName string, pb *gmqtt.PacketBytes, m chan<-
 		"UNSUBSCRIBE",
 	)
 }
-func collectPacketsStatsCounter(metricName string, pc *gmqtt.PacketCount, m chan<- prometheus.Metric) {
+func collectPacketsStatsCounter(metricName string, pc *mqtt.PacketCount, m chan<- prometheus.Metric) {
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", []string{"type"}, nil),
 		prometheus.CounterValue,
@@ -258,7 +258,7 @@ func collectPacketsStatsCounter(metricName string, pc *gmqtt.PacketCount, m chan
 	)
 }
 
-func collectClientStats(c *gmqtt.ClientStats, m chan<- prometheus.Metric) {
+func collectClientStats(c *mqtt.ClientStats, m chan<- prometheus.Metric) {
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricPrefix+"clients_connected_total", "", nil, nil),
 		prometheus.CounterValue,
@@ -285,13 +285,13 @@ func collectClientStats(c *gmqtt.ClientStats, m chan<- prometheus.Metric) {
 		float64(atomic.LoadUint64(&c.ExpiredTotal)),
 	)
 }
-func collectMessageStats(ms *gmqtt.MessageStats, m chan<- prometheus.Metric) {
+func collectMessageStats(ms *mqtt.MessageStats, m chan<- prometheus.Metric) {
 	collectMessageStatsDropped(ms, m)
 	collectMessageStatsQueued(ms, m)
 	collectMessageStatsReceived(ms, m)
 	collectMessageStatsSent(ms, m)
 }
-func collectMessageStatsDropped(ms *gmqtt.MessageStats, m chan<- prometheus.Metric) {
+func collectMessageStatsDropped(ms *mqtt.MessageStats, m chan<- prometheus.Metric) {
 	metricName := metricPrefix + "messages_dropped_total"
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", []string{"qos"}, nil),
@@ -310,7 +310,7 @@ func collectMessageStatsDropped(ms *gmqtt.MessageStats, m chan<- prometheus.Metr
 	)
 }
 
-func collectMessageStatsQueued(ms *gmqtt.MessageStats, m chan<- prometheus.Metric) {
+func collectMessageStatsQueued(ms *mqtt.MessageStats, m chan<- prometheus.Metric) {
 	metricName := "messages_queued_current"
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", nil, nil),
@@ -318,7 +318,7 @@ func collectMessageStatsQueued(ms *gmqtt.MessageStats, m chan<- prometheus.Metri
 		float64(atomic.LoadUint64(&ms.QueuedCurrent)),
 	)
 }
-func collectMessageStatsReceived(ms *gmqtt.MessageStats, m chan<- prometheus.Metric) {
+func collectMessageStatsReceived(ms *mqtt.MessageStats, m chan<- prometheus.Metric) {
 	metricName := "messages_received_total"
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", []string{"qos"}, nil),
@@ -336,7 +336,7 @@ func collectMessageStatsReceived(ms *gmqtt.MessageStats, m chan<- prometheus.Met
 		float64(atomic.LoadUint64(&ms.Qos2.ReceivedTotal)), "2",
 	)
 }
-func collectMessageStatsSent(ms *gmqtt.MessageStats, m chan<- prometheus.Metric) {
+func collectMessageStatsSent(ms *mqtt.MessageStats, m chan<- prometheus.Metric) {
 	metricName := "messages_sent_total"
 	m <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(metricName, "", []string{"qos"}, nil),

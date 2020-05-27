@@ -1,4 +1,4 @@
-package gmqtt
+package mqtt
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 
-	retained_trie "github.com/danclive/gmqtt/retained/trie"
-	subscription_trie "github.com/danclive/gmqtt/subscription/trie"
+	retained_trie "github.com/danclive/mqtt/retained/trie"
+	subscription_trie "github.com/danclive/mqtt/subscription/trie"
 
-	"github.com/danclive/gmqtt/pkg/packets"
-	"github.com/danclive/gmqtt/retained"
-	"github.com/danclive/gmqtt/subscription"
+	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/retained"
+	"github.com/danclive/mqtt/subscription"
 )
 
 var (
@@ -532,7 +532,7 @@ type WsServer struct {
 	KeyFile  string //TLS configration
 }
 
-// NewServer returns a gmqtt server instance with the given options
+// NewServer returns a mqtt server instance with the given options
 func NewServer(opts ...Options) *server {
 	// statistics
 	subStore := subscription_trie.NewStore()
@@ -915,7 +915,7 @@ func (srv *server) Run() {
 	for _, v := range srv.websocketServer {
 		ws = append(ws, v.Server.Addr)
 	}
-	zaplog.Info("starting gmqtt server", zap.Strings("tcp server listen on", tcps), zap.Strings("websocket server listen on", ws))
+	zaplog.Info("starting mqtt server", zap.Strings("tcp server listen on", tcps), zap.Strings("websocket server listen on", ws))
 
 	err := srv.loadPlugins()
 	if err != nil {
@@ -940,7 +940,7 @@ func (srv *server) Run() {
 //  3. Waiting for all connections have been closed
 //  4. Triggering OnStop()
 func (srv *server) Stop(ctx context.Context) error {
-	zaplog.Info("stopping gmqtt server")
+	zaplog.Info("stopping mqtt server")
 	defer func() {
 		zaplog.Info("server stopped")
 		//zaplog.Sync()

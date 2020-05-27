@@ -1,5 +1,5 @@
-// Package gmqtt provides an MQTT v3.1.1 server library.
-package gmqtt
+// Package mqtt provides an MQTT v3.1.1 server library.
+package mqtt
 
 import (
 	"bufio"
@@ -19,7 +19,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/danclive/gmqtt/pkg/packets"
+	"github.com/danclive/mqtt/pkg/packets"
 )
 
 // Error

@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DrmagicE/gmqtt"
-	"github.com/DrmagicE/gmqtt/pkg/packets"
+	"github.com/danclive/gmqtt"
+	"github.com/danclive/gmqtt/pkg/packets"
 )
 
 func main() {

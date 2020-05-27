@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DrmagicE/gmqtt"
+	"github.com/danclive/gmqtt"
 )
 
 func main() {

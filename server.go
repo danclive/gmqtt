@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 
 	retained_trie "github.com/danclive/mqtt/retained/trie"
@@ -66,6 +65,9 @@ type Server interface {
 	GetConfig() Config
 	// GetStatsManager returns StatsManager
 	GetStatsManager() StatsManager
+	Init(opts ...Options)
+	Run()
+	Stop(ctx context.Context) error
 }
 
 // server represents a mqtt server instance.
@@ -192,48 +194,69 @@ func (srv *server) registerHandler(register *register) {
 	var code uint8
 	client := register.client
 	defer close(client.ready)
+
 	connect := register.connect
-	var sessionReuse bool
+
 	if connect.AckCode != packets.CodeAccepted {
 		err := errors.New("reject connection, ack code:" + strconv.Itoa(int(connect.AckCode)))
+
 		ack := connect.NewConnackPacket(false)
 		client.writePacket(ack)
+
 		register.error = err
 		return
 	}
+
 	if srv.hooks.OnConnect != nil {
 		code = srv.hooks.OnConnect(context.Background(), client)
 	}
+
 	connect.AckCode = code
+
 	if code != packets.CodeAccepted {
 		err := errors.New("reject connection, ack code:" + strconv.Itoa(int(code)))
+
 		ack := connect.NewConnackPacket(false)
 		client.writePacket(ack)
 		client.setError(err)
+
 		register.error = err
 		return
 	}
+
 	if srv.hooks.OnConnected != nil {
 		srv.hooks.OnConnected(context.Background(), client)
 	}
+
+	// 统计数据
 	srv.statsManager.addClientConnected()
 	srv.statsManager.addSessionActive()
 
 	client.setConnectedAt(time.Now())
+
+	var sessionReuse bool // 是否重用 session
+
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
+
 	var oldSession *session
 	oldClient, oldExist := srv.clients[client.opts.clientID]
 	srv.clients[client.opts.clientID] = client
+
 	if oldExist {
 		oldSession = oldClient.session
+
 		if oldClient.IsConnected() {
+
 			zaplog.Info("logging with duplicate ClientID",
 				zap.String("remote", client.rwc.RemoteAddr().String()),
 				zap.String("client_id", client.OptionsReader().ClientID()),
 			)
+
 			oldClient.setSwitching()
+
 			<-oldClient.Close()
+
 			if oldClient.opts.willFlag {
 				willMsg := &packets.Publish{
 					Dup:       false,
@@ -242,11 +265,13 @@ func (srv *server) registerHandler(register *register) {
 					TopicName: []byte(oldClient.opts.willTopic),
 					Payload:   oldClient.opts.willPayload,
 				}
+
 				go func() {
 					msgRouter := &msgRouter{msg: messageFromPublish(willMsg), match: true}
 					srv.msgRouter <- msgRouter
 				}()
 			}
+
 			if !client.opts.cleanSession && !oldClient.opts.cleanSession { //reuse old session
 				sessionReuse = true
 			}
@@ -260,10 +285,14 @@ func (srv *server) registerHandler(register *register) {
 			srv.hooks.OnSessionTerminated(context.Background(), oldClient, ConflictTermination)
 		}
 	}
+
 	ack := connect.NewConnackPacket(sessionReuse)
 	client.out <- ack
+
 	client.setConnected()
-	if sessionReuse { //发送还未确认的消息和离线消息队列 sending inflight messages & offline message
+
+	if sessionReuse {
+		//发送还未确认的消息和离线消息队列 sending inflight messages & offline message
 		client.session.unackpublish = oldSession.unackpublish
 		client.statsManager = oldClient.statsManager
 		//send unacknowledged publish
@@ -329,12 +358,16 @@ func (srv *server) registerHandler(register *register) {
 			srv.hooks.OnSessionCreated(context.Background(), client)
 		}
 	}
+
 	delete(srv.offlineClients, client.opts.clientID)
 }
+
 func (srv *server) unregisterHandler(unregister *unregister) {
 	defer close(unregister.done)
+
 	client := unregister.client
 	client.setDisConnected()
+
 	select {
 	case <-client.ready:
 	default:
@@ -342,6 +375,7 @@ func (srv *server) unregisterHandler(unregister *unregister) {
 		// session is not created, so there is no need to unregister.
 		return
 	}
+
 clearIn:
 	for {
 		select {
@@ -362,33 +396,42 @@ clearIn:
 			TopicName: []byte(client.opts.willTopic),
 			Payload:   client.opts.willPayload,
 		}
+
 		msg := messageFromPublish(willMsg)
+
 		go func() {
 			msgRouter := &msgRouter{msg: msg, match: true}
 			client.server.msgRouter <- msgRouter
 		}()
 	}
+
 	if client.opts.cleanSession {
 		zaplog.Info("logged out and cleaning session",
 			zap.String("remote_addr", client.rwc.RemoteAddr().String()),
 			zap.String("client_id", client.OptionsReader().ClientID()),
 		)
+
 		srv.mu.Lock()
 		srv.removeSession(client.opts.clientID)
 		srv.mu.Unlock()
+
 		if srv.hooks.OnSessionTerminated != nil {
 			srv.hooks.OnSessionTerminated(context.Background(), client, NormalTermination)
 		}
+
+		// 统计数据
 		srv.statsManager.messageDequeue(client.statsManager.GetStats().MessageStats.QueuedCurrent)
-	} else { //store session 保持session
+	} else {
+		//store session 保持session
 		srv.mu.Lock()
 		srv.offlineClients[client.opts.clientID] = time.Now()
 		srv.mu.Unlock()
+
 		zaplog.Info("logged out and storing session",
 			zap.String("remote_addr", client.rwc.RemoteAddr().String()),
 			zap.String("client_id", client.OptionsReader().ClientID()),
 		)
-		//clear  out
+		//clear out
 	clearOut:
 		for {
 			select {
@@ -400,6 +443,8 @@ clearIn:
 				break clearOut
 			}
 		}
+
+		// 统计数据
 		srv.statsManager.addSessionInactive()
 	}
 }
@@ -407,12 +452,17 @@ clearIn:
 // 所有进来的 msg都会分配pid，指定pid重传的不在这里处理
 func (srv *server) msgRouterHandler(m *msgRouter) {
 	msg := m.msg
+
 	var matched subscription.ClientTopics
+
 	if m.match {
 		matched = srv.subscriptionsDB.GetTopicMatched(msg.Topic())
+
 		if m.clientID != "" {
 			tmp, ok := matched[m.clientID]
+
 			matched = make(subscription.ClientTopics)
+
 			if ok {
 				matched[m.clientID] = tmp
 			}
@@ -420,28 +470,35 @@ func (srv *server) msgRouterHandler(m *msgRouter) {
 	} else {
 		// no need to search in subscriptionsDB.
 		matched = make(subscription.ClientTopics)
+
 		matched[m.clientID] = append(matched[m.clientID], packets.Topic{
 			Qos:  msg.Qos(),
 			Name: msg.Topic(),
 		})
 	}
+
 	srv.mu.RLock()
 	defer srv.mu.RUnlock()
+
 	for cid, topics := range matched {
 		if srv.config.DeliveryMode == Overlap {
 			for _, t := range topics {
 				if c, ok := srv.clients[cid]; ok {
 					publish := messageToPublish(msg)
+
 					if publish.Qos > t.Qos {
 						publish.Qos = t.Qos
 					}
+
 					publish.Dup = false
+
 					c.publish(publish)
 				}
 			}
 		} else {
 			// deliver once
 			var maxQos uint8
+
 			for _, t := range topics {
 				if t.Qos > maxQos {
 					maxQos = t.Qos
@@ -450,12 +507,16 @@ func (srv *server) msgRouterHandler(m *msgRouter) {
 					break
 				}
 			}
+
 			if c, ok := srv.clients[cid]; ok {
 				publish := messageToPublish(msg)
+
 				if publish.Qos > maxQos {
 					publish.Qos = maxQos
 				}
+
 				publish.Dup = false
+
 				c.publish(publish)
 			}
 		}
@@ -474,7 +535,9 @@ func (srv *server) sessionExpireCheck() {
 	if expire == 0 {
 		return
 	}
+
 	now := time.Now()
+
 	srv.mu.Lock()
 	for id, disconnectedAt := range srv.offlineClients {
 		if now.Sub(disconnectedAt) >= expire {
@@ -489,7 +552,6 @@ func (srv *server) sessionExpireCheck() {
 		}
 	}
 	srv.mu.Unlock()
-
 }
 
 // server event loop
@@ -521,19 +583,10 @@ func (srv *server) eventLoop() {
 			}
 		}
 	}
-
-}
-
-// WsServer is used to build websocket server
-type WsServer struct {
-	Server   *http.Server
-	Path     string // Url path
-	CertFile string //TLS configration
-	KeyFile  string //TLS configration
 }
 
 // NewServer returns a mqtt server instance with the given options
-func NewServer(opts ...Options) *server {
+func NewServer(opts ...Options) Server {
 	// statistics
 	subStore := subscription_trie.NewStore()
 	statsMgr := newStatsManager(subStore)
@@ -547,10 +600,13 @@ func NewServer(opts ...Options) *server {
 		config:          DefaultConfig,
 		statsManager:    statsMgr,
 	}
+
 	srv.publishService = &publishService{server: srv}
+
 	for _, fn := range opts {
 		fn(srv)
 	}
+
 	return srv
 }
 
@@ -572,6 +628,7 @@ func (srv *server) serveTCP(l net.Listener) {
 	defer func() {
 		l.Close()
 	}()
+
 	var tempDelay time.Duration
 	for {
 		rw, e := l.Accept()
@@ -604,57 +661,6 @@ func (srv *server) serveTCP(l net.Listener) {
 	}
 }
 
-var defaultUpgrader = &websocket.Upgrader{
-	ReadBufferSize:  readBufferSize,
-	WriteBufferSize: writeBufferSize,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-	Subprotocols: []string{"mqtt"},
-}
-
-//实现io.ReadWriter接口
-// wsConn implements the io.ReadWriter
-type wsConn struct {
-	net.Conn
-	c *websocket.Conn
-}
-
-func (ws *wsConn) Close() error {
-	return ws.Conn.Close()
-}
-
-func (ws *wsConn) Read(p []byte) (n int, err error) {
-	msgType, r, err := ws.c.NextReader()
-	if err != nil {
-		return 0, err
-	}
-	if msgType != websocket.BinaryMessage {
-		return 0, ErrInvalWsMsgType
-	}
-	return r.Read(p)
-}
-
-func (ws *wsConn) Write(p []byte) (n int, err error) {
-	err = ws.c.WriteMessage(websocket.BinaryMessage, p)
-	if err != nil {
-		return 0, err
-	}
-	return len(p), err
-}
-
-func (srv *server) serveWebSocket(ws *WsServer) {
-	var err error
-	if ws.CertFile != "" && ws.KeyFile != "" {
-		err = ws.Server.ListenAndServeTLS(ws.CertFile, ws.KeyFile)
-	} else {
-		err = ws.Server.ListenAndServe()
-	}
-	if err != http.ErrServerClosed {
-		panic(err.Error())
-	}
-}
-
 func (srv *server) newClient(c net.Conn) *client {
 	client := &client{
 		server:        srv,
@@ -672,10 +678,13 @@ func (srv *server) newClient(c net.Conn) *client {
 		ready:         make(chan struct{}),
 		statsManager:  newSessionStatsManager(),
 	}
+
 	client.packetReader = packets.NewReader(client.bufr)
 	client.packetWriter = packets.NewWriter(client.bufw)
+
 	client.setConnecting()
 	client.newSession()
+
 	return client
 }
 
@@ -887,20 +896,6 @@ func (srv *server) loadPlugins() error {
 	return nil
 }
 
-func (srv *server) wsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := defaultUpgrader.Upgrade(w, r, nil)
-		if err != nil {
-			zaplog.Warn("websocket upgrade error", zap.String("msg", err.Error()))
-			return
-		}
-		defer c.Close()
-		conn := &wsConn{c.UnderlyingConn(), c}
-		client := srv.newClient(conn)
-		client.serve()
-	}
-}
-
 // Run starts the mqtt server. This method is non-blocking
 func (srv *server) Run() {
 	srv.msgRouter = make(chan *msgRouter, srv.config.MsgRouterLen)
@@ -909,23 +904,30 @@ func (srv *server) Run() {
 
 	var tcps []string
 	var ws []string
+
 	for _, v := range srv.tcpListener {
 		tcps = append(tcps, v.Addr().String())
 	}
+
 	for _, v := range srv.websocketServer {
 		ws = append(ws, v.Server.Addr)
 	}
+
 	zaplog.Info("starting mqtt server", zap.Strings("tcp server listen on", tcps), zap.Strings("websocket server listen on", ws))
 
 	err := srv.loadPlugins()
 	if err != nil {
 		panic(err)
 	}
+
 	srv.status = serverStatusStarted
+
 	go srv.eventLoop()
+
 	for _, ln := range srv.tcpListener {
 		go srv.serveTCP(ln)
 	}
+
 	for _, server := range srv.websocketServer {
 		mux := http.NewServeMux()
 		mux.Handle(server.Path, srv.wsHandler())
@@ -941,16 +943,19 @@ func (srv *server) Run() {
 //  4. Triggering OnStop()
 func (srv *server) Stop(ctx context.Context) error {
 	zaplog.Info("stopping mqtt server")
+
 	defer func() {
 		zaplog.Info("server stopped")
 		//zaplog.Sync()
 	}()
+
 	select {
 	case <-srv.exitChan:
 		return nil
 	default:
 		close(srv.exitChan)
 	}
+
 	for _, l := range srv.tcpListener {
 		l.Close()
 	}
@@ -968,7 +973,9 @@ func (srv *server) Stop(ctx context.Context) error {
 		i++
 	}
 	srv.mu.Unlock()
+
 	done := make(chan struct{})
+
 	go func() {
 		for _, v := range closeCompleteSet {
 			//等所有的session退出完毕
@@ -977,6 +984,7 @@ func (srv *server) Stop(ctx context.Context) error {
 		}
 		close(done)
 	}()
+
 	select {
 	case <-ctx.Done():
 		zaplog.Warn("server stop timeout, forced exit", zap.String("error", ctx.Err().Error()))

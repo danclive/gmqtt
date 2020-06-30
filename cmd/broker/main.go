@@ -42,10 +42,12 @@ func main() {
 		}, "/metrics")),
 		mqtt.WithLogger(l),
 	)
+
 	s.Run()
+
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	<-signalCh
-	s.Stop(context.Background())
 
+	s.Stop(context.Background())
 }

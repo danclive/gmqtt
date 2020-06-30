@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danclive/mqtt/pkg/packets"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
-
-	"github.com/danclive/mqtt/pkg/packets"
 )
 
 const testRedeliveryInternal = 10 * time.Second
@@ -124,7 +123,8 @@ func newTestServer() *server {
 	if srv != nil {
 		s = srv
 	} else {
-		s = NewServer(WithLogger(zap.NewNop()))
+		d := NewServer(WithLogger(zap.NewNop()))
+		s = d.(*server)
 		s.config.RetryInterval = testRedeliveryInternal
 		s.config.RetryCheckInterval = testRedeliveryInternal
 	}
@@ -1225,7 +1225,8 @@ func TestOfflineMessageQueueing(t *testing.T) {
 	a := assert.New(t)
 	c := DefaultConfig
 	c.MaxMsgQueue = 5
-	srv = NewServer(WithConfig(c), WithLogger(zap.NewNop()))
+	d := NewServer(WithConfig(c), WithLogger(zap.NewNop()))
+	srv = d.(*server)
 	defer func() {
 		srv = nil
 	}()

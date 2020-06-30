@@ -22,7 +22,6 @@ type trieDB struct {
 	// statistics of the server and each client
 	stats       subscription.Stats
 	clientStats map[string]*subscription.Stats // [clientID]
-
 }
 
 func (t *trieDB) getTrie(topicName string) *topicTrie {
@@ -35,28 +34,34 @@ func (t *trieDB) getTrie(topicName string) *topicTrie {
 func (db *trieDB) GetClientSubscriptions(clientID string) []packets.Topic {
 	db.RLock()
 	defer db.RUnlock()
+
 	var rs []packets.Topic
+
 	for topicName, v := range db.userIndex[clientID] {
 		rs = append(rs, packets.Topic{
 			Qos:  v.clients[clientID],
 			Name: topicName,
 		})
 	}
+
 	for topicName, v := range db.systemIndex[clientID] {
 		rs = append(rs, packets.Topic{
 			Qos:  v.clients[clientID],
 			Name: topicName,
 		})
 	}
+
 	return rs
 }
 
 func (db *trieDB) Iterate(fn subscription.IterateFn) {
 	db.RLock()
 	defer db.RUnlock()
+
 	if !db.userTrie.preOrderTraverse(fn) {
 		return
 	}
+
 	db.systemTrie.preOrderTraverse(fn)
 }
 
@@ -69,6 +74,7 @@ func (db *trieDB) GetStats() subscription.Stats {
 func (db *trieDB) GetClientStats(clientID string) (subscription.Stats, error) {
 	db.RLock()
 	defer db.RUnlock()
+
 	if stats, ok := db.clientStats[clientID]; !ok {
 		return subscription.Stats{}, errors.New("client not exists")
 	} else {
@@ -79,6 +85,7 @@ func (db *trieDB) GetClientStats(clientID string) (subscription.Stats, error) {
 func (db *trieDB) Get(topicFilter string) subscription.ClientTopics {
 	db.RLock()
 	defer db.RUnlock()
+
 	node := db.getTrie(topicFilter).find(topicFilter)
 	if node != nil {
 		rs := make(subscription.ClientTopics)
@@ -90,6 +97,7 @@ func (db *trieDB) Get(topicFilter string) subscription.ClientTopics {
 		}
 		return rs
 	}
+
 	return nil
 }
 
@@ -116,11 +124,15 @@ func NewStore() *trieDB {
 func (db *trieDB) Subscribe(clientID string, topics ...packets.Topic) subscription.SubscribeResult {
 	db.Lock()
 	defer db.Unlock()
+
 	var node *topicNode
 	var index map[string]map[string]*topicNode
+
 	rs := make(subscription.SubscribeResult, len(topics))
+
 	for k, topic := range topics {
 		rs[k].Topic = topic
+
 		if isSystemTopic(topic.Name) {
 			node = db.systemTrie.subscribe(clientID, topic)
 			index = db.systemIndex
@@ -128,10 +140,12 @@ func (db *trieDB) Subscribe(clientID string, topics ...packets.Topic) subscripti
 			node = db.userTrie.subscribe(clientID, topic)
 			index = db.userIndex
 		}
+
 		if index[clientID] == nil {
 			index[clientID] = make(map[string]*topicNode)
 			db.clientStats[clientID] = &subscription.Stats{}
 		}
+
 		if _, ok := index[clientID][topic.Name]; !ok {
 			db.stats.SubscriptionsTotal++
 			db.stats.SubscriptionsCurrent++
@@ -140,8 +154,10 @@ func (db *trieDB) Subscribe(clientID string, topics ...packets.Topic) subscripti
 		} else {
 			rs[k].AlreadyExisted = true
 		}
+
 		index[clientID][topic.Name] = node
 	}
+
 	return rs
 }
 
@@ -149,13 +165,16 @@ func (db *trieDB) Subscribe(clientID string, topics ...packets.Topic) subscripti
 func (db *trieDB) Unsubscribe(clientID string, topics ...string) {
 	db.Lock()
 	defer db.Unlock()
+
 	var index map[string]map[string]*topicNode
+
 	for _, topic := range topics {
 		if isSystemTopic(topic) {
 			index = db.systemIndex
 		} else {
 			index = db.userIndex
 		}
+
 		if _, ok := index[clientID]; ok {
 			if _, ok := index[clientID][topic]; ok {
 				db.stats.SubscriptionsCurrent--
@@ -163,6 +182,7 @@ func (db *trieDB) Unsubscribe(clientID string, topics ...string) {
 			}
 			delete(index[clientID], topic)
 		}
+
 		db.getTrie(topic).unsubscribe(clientID, topic)
 	}
 
@@ -170,9 +190,11 @@ func (db *trieDB) Unsubscribe(clientID string, topics ...string) {
 
 func (db *trieDB) unsubscribeAll(index map[string]map[string]*topicNode, clientID string) {
 	db.stats.SubscriptionsCurrent -= uint64(len(index[clientID]))
+
 	if db.clientStats[clientID] != nil {
 		db.clientStats[clientID].SubscriptionsCurrent -= uint64(len(index[clientID]))
 	}
+
 	for topicName, node := range index[clientID] {
 		delete(node.clients, clientID)
 		if len(node.clients) == 0 && len(node.children) == 0 {
@@ -180,6 +202,7 @@ func (db *trieDB) unsubscribeAll(index map[string]map[string]*topicNode, clientI
 			delete(node.parent.children, ss[len(ss)-1])
 		}
 	}
+
 	delete(index, clientID)
 }
 

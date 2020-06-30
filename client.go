@@ -17,9 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/danclive/mqtt/pkg/packets"
+	"go.uber.org/zap"
 )
 
 // Error
@@ -52,6 +51,7 @@ func newBufioReaderSize(r io.Reader, size int) *bufio.Reader {
 		br.Reset(r)
 		return br
 	}
+
 	return bufio.NewReaderSize(r, size)
 }
 
@@ -66,6 +66,7 @@ func newBufioWriterSize(w io.Writer, size int) *bufio.Writer {
 		bw.Reset(w)
 		return bw
 	}
+
 	return bufio.NewWriterSize(w, size)
 }
 
@@ -253,18 +254,23 @@ func (o *options) WillFlag() bool {
 func (o *options) WillRetain() bool {
 	return o.willRetain
 }
+
 func (o *options) WillQos() uint8 {
 	return o.willQos
 }
+
 func (o *options) WillTopic() string {
 	return o.willTopic
 }
+
 func (o *options) WillPayload() []byte {
 	return o.willPayload
 }
+
 func (o *options) LocalAddr() net.Addr {
 	return o.localAddr
 }
+
 func (o *options) RemoteAddr() net.Addr {
 	return o.remoteAddr
 }
@@ -281,6 +287,7 @@ func (client *client) setError(err error) {
 
 func (client *client) writeLoop() {
 	var err error
+
 	defer func() {
 		if re := recover(); re != nil {
 			err = errors.New(fmt.Sprint(re))
@@ -288,6 +295,7 @@ func (client *client) writeLoop() {
 		client.setError(err)
 		client.wg.Done()
 	}()
+
 	for {
 		select {
 		case <-client.close: //关闭
@@ -298,10 +306,13 @@ func (client *client) writeLoop() {
 				zap.String("client_id", client.opts.clientID),
 				zap.String("remote_addr", client.rwc.RemoteAddr().String()),
 			)
+
 			err = client.writePacket(packet)
 			if err != nil {
 				return
 			}
+
+			// 统计数据
 			client.server.statsManager.packetSent(packet)
 			if pub, ok := packet.(*packets.Publish); ok {
 				client.server.statsManager.messageSent(pub.Qos)
@@ -317,11 +328,13 @@ func (client *client) writePacket(packet packets.Packet) error {
 	if err != nil {
 		return err
 	}
+
 	return client.packetWriter.Flush()
 }
 
 func (client *client) readLoop() {
 	var err error
+
 	defer func() {
 		if re := recover(); re != nil {
 			err = errors.New(fmt.Sprint(re))
@@ -329,26 +342,33 @@ func (client *client) readLoop() {
 		client.setError(err)
 		client.wg.Done()
 	}()
+
 	for {
 		var packet packets.Packet
+
 		if client.IsConnected() {
 			if keepAlive := client.opts.keepAlive; keepAlive != 0 { //KeepAlive
 				client.rwc.SetReadDeadline(time.Now().Add(time.Duration(keepAlive/2+keepAlive) * time.Second))
 			}
 		}
+
 		packet, err = client.packetReader.ReadPacket()
 		if err != nil {
 			return
 		}
+
 		zaplog.Debug("received packet",
 			zap.String("packet", packet.String()),
 			zap.String("remote", client.rwc.RemoteAddr().String()),
 			zap.String("client_id", client.opts.clientID),
 		)
+
+		// 统计数据
 		client.server.statsManager.packetReceived(packet)
 		if pub, ok := packet.(*packets.Publish); ok {
 			client.server.statsManager.messageReceived(pub.Qos)
 		}
+
 		client.in <- packet
 	}
 }
@@ -417,6 +437,7 @@ func getRandomUUID() string {
 
 func (client *client) connectWithTimeOut() (ok bool) {
 	var err error
+
 	defer func() {
 		if err != nil {
 			client.setError(err)
@@ -425,9 +446,13 @@ func (client *client) connectWithTimeOut() (ok bool) {
 			ok = true
 		}
 	}()
+
+	// 5s 内必须收到首个数据包
 	timeout := time.NewTimer(5 * time.Second)
 	defer timeout.Stop()
+
 	var p packets.Packet
+
 	select {
 	case <-client.close:
 		return
@@ -436,15 +461,18 @@ func (client *client) connectWithTimeOut() (ok bool) {
 		err = ErrConnectTimeOut
 		return
 	}
+
 	conn, flag := p.(*packets.Connect)
 	if !flag {
 		err = ErrInvalStatus
 		return
 	}
+
 	client.opts.clientID = string(conn.ClientID)
 	if client.opts.clientID == "" {
 		client.opts.clientID = getRandomUUID()
 	}
+
 	client.opts.keepAlive = conn.KeepAlive
 	client.opts.cleanSession = conn.CleanSession
 	client.opts.username = string(conn.Username)
@@ -456,24 +484,30 @@ func (client *client) connectWithTimeOut() (ok bool) {
 	client.opts.willRetain = conn.WillRetain
 	client.opts.remoteAddr = client.rwc.RemoteAddr()
 	client.opts.localAddr = client.rwc.LocalAddr()
+
 	if keepAlive := client.opts.keepAlive; keepAlive != 0 { //KeepAlive
 		client.rwc.SetReadDeadline(time.Now().Add(time.Duration(keepAlive/2+keepAlive) * time.Second))
 	}
+
 	register := &register{
 		client:  client,
 		connect: conn,
 	}
+
 	select {
 	case client.server.register <- register:
 	case <-client.close:
 		return
 	}
+
 	select {
 	case <-client.close:
 		return
 	case <-client.ready:
 	}
+
 	err = register.error
+
 	return
 }
 
@@ -487,16 +521,19 @@ func (client *client) newSession() {
 		freePid:      1,
 		config:       &client.server.config,
 	}
+
 	client.session = s
 }
 
 func (client *client) internalClose() {
 	defer close(client.closeComplete)
+
 	if client.Status() != Switiching {
 		unregister := &unregister{client: client, done: make(chan struct{})}
 		client.server.unregister <- unregister
 		<-unregister.done
 	}
+
 	putBufioReader(client.bufr)
 	putBufioWriter(client.bufw)
 
@@ -504,7 +541,10 @@ func (client *client) internalClose() {
 	if client.server.hooks.OnClose != nil {
 		client.server.hooks.OnClose(context.Background(), client, client.err)
 	}
+
 	client.setDisconnectedAt(time.Now())
+
+	// 统计数据
 	client.server.statsManager.addClientDisconnected()
 	client.server.statsManager.decSessionActive()
 }
@@ -558,30 +598,38 @@ func (client *client) write(packets packets.Packet) {
 //Subscribe handler
 func (client *client) subscribeHandler(sub *packets.Subscribe) {
 	srv := client.server
+
 	if srv.hooks.OnSubscribe != nil {
 		for k, v := range sub.Topics {
 			qos := srv.hooks.OnSubscribe(context.Background(), client, v)
 			sub.Topics[k].Qos = qos
 		}
 	}
+
 	var msgs []packets.Message
+
 	suback := sub.NewSubBack()
+
 	for k, v := range sub.Topics {
 		if v.Qos != packets.SUBSCRIBE_FAILURE {
 			topic := packets.Topic{
 				Name: v.Name,
 				Qos:  suback.Payload[k],
 			}
+
 			srv.subscriptionsDB.Subscribe(client.opts.clientID, topic)
+
 			if srv.hooks.OnSubscribed != nil {
 				srv.hooks.OnSubscribed(context.Background(), client, topic)
 			}
+
 			zaplog.Info("subscribe succeeded",
 				zap.String("topic", v.Name),
 				zap.Uint8("qos", suback.Payload[k]),
 				zap.String("client_id", client.opts.clientID),
 				zap.String("remote_addr", client.rwc.RemoteAddr().String()),
 			)
+
 			// matched retained messages
 			msgs = srv.retainedDB.GetMatchedMessages(topic.Name)
 		} else {
@@ -593,7 +641,9 @@ func (client *client) subscribeHandler(sub *packets.Subscribe) {
 			)
 		}
 	}
+
 	client.write(suback)
+
 	for _, msg := range msgs {
 		srv.msgRouter <- &msgRouter{msg: msg, match: false, clientID: client.opts.clientID}
 	}
@@ -603,11 +653,14 @@ func (client *client) subscribeHandler(sub *packets.Subscribe) {
 func (client *client) publishHandler(pub *packets.Publish) {
 	s := client.session
 	srv := client.server
+
 	var dup bool
+
 	if pub.Qos == packets.QOS_1 {
 		puback := pub.NewPuback()
 		client.write(puback)
 	}
+
 	if pub.Qos == packets.QOS_2 {
 		pubrec := pub.NewPubrec()
 		client.write(pubrec)
@@ -617,7 +670,9 @@ func (client *client) publishHandler(pub *packets.Publish) {
 			s.unackpublish[pub.PacketID] = true
 		}
 	}
+
 	msg := messageFromPublish(pub)
+
 	if pub.Retain {
 		if len(pub.Payload) == 0 {
 			srv.retainedDB.Remove(string(pub.TopicName))
@@ -625,14 +680,18 @@ func (client *client) publishHandler(pub *packets.Publish) {
 			srv.retainedDB.AddOrReplace(msg)
 		}
 	}
+
 	if !dup {
 		var valid = true
+
 		if srv.hooks.OnMsgArrived != nil {
 			valid = srv.hooks.OnMsgArrived(context.Background(), client, msg)
 		}
+
 		if valid {
 			pub.Retain = false
 			msgRouter := &msgRouter{msg: messageFromPublish(pub), match: true}
+
 			select {
 			case <-client.close:
 				return
@@ -641,48 +700,57 @@ func (client *client) publishHandler(pub *packets.Publish) {
 		}
 	}
 }
+
 func (client *client) pubackHandler(puback *packets.Puback) {
 	client.unsetInflight(puback)
 }
+
 func (client *client) pubrelHandler(pubrel *packets.Pubrel) {
 	delete(client.session.unackpublish, pubrel.PacketID)
 	pubcomp := pubrel.NewPubcomp()
 	client.write(pubcomp)
 }
+
 func (client *client) pubrecHandler(pubrec *packets.Pubrec) {
 	client.unsetInflight(pubrec)
 	client.setAwaitRel(pubrec.PacketID)
 	pubrel := pubrec.NewPubrel()
 	client.write(pubrel)
 }
+
 func (client *client) pubcompHandler(pubcomp *packets.Pubcomp) {
 	client.unsetAwaitRel(pubcomp.PacketID)
 }
+
 func (client *client) pingreqHandler(pingreq *packets.Pingreq) {
 	resp := pingreq.NewPingresp()
 	client.write(resp)
 }
+
 func (client *client) unsubscribeHandler(unSub *packets.Unsubscribe) {
 	srv := client.server
 	unSuback := unSub.NewUnSubBack()
 	client.write(unSuback)
+
 	for _, topicName := range unSub.Topics {
 		srv.subscriptionsDB.Unsubscribe(client.opts.clientID, topicName)
+
 		if srv.hooks.OnUnsubscribed != nil {
 			srv.hooks.OnUnsubscribed(context.Background(), client, topicName)
 		}
+
 		zaplog.Info("unsubscribed",
 			zap.String("topic", topicName),
 			zap.String("client_id", client.opts.clientID),
 			zap.String("remote_addr", client.rwc.RemoteAddr().String()),
 		)
 	}
-
 }
 
 //读处理
 func (client *client) readHandle() {
 	var err error
+
 	defer func() {
 		if re := recover(); re != nil {
 			err = errors.New(fmt.Sprint(re))
@@ -690,6 +758,7 @@ func (client *client) readHandle() {
 		client.setError(err)
 		client.wg.Done()
 	}()
+
 	for {
 		select {
 		case <-client.close:
@@ -727,7 +796,9 @@ func (client *client) readHandle() {
 //重传处理, 除了重传递publish之外，pubrel也要重传
 func (client *client) redeliver() {
 	var err error
+
 	s := client.session
+
 	defer func() {
 		if re := recover(); re != nil {
 			err = errors.New(fmt.Sprint(re))
@@ -735,10 +806,13 @@ func (client *client) redeliver() {
 		client.setError(err)
 		client.wg.Done()
 	}()
+
 	retryCheckInterval := client.server.config.RetryCheckInterval
 	retryInterval := client.server.config.RetryInterval
+
 	timer := time.NewTicker(retryCheckInterval)
 	defer timer.Stop()
+
 	for {
 		select {
 		case <-client.close: //关闭广播
@@ -782,14 +856,20 @@ func (client *client) redeliver() {
 //server goroutine结束的条件:1客户端断开连接 或 2发生错误
 func (client *client) serve() {
 	defer client.internalClose()
+
 	client.wg.Add(3)
+
 	go client.errorWatch()
-	go client.readLoop()                       //read packet
-	go client.writeLoop()                      //write packet
-	if ok := client.connectWithTimeOut(); ok { //链接成功,建立session
+	go client.readLoop()  //read packet
+	go client.writeLoop() //write packet
+
+	if ok := client.connectWithTimeOut(); ok {
+		//链接成功,建立session
 		client.wg.Add(2)
+
 		go client.readHandle()
 		go client.redeliver()
 	}
+
 	client.wg.Wait()
 }

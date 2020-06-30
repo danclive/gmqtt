@@ -17,6 +17,7 @@ type PublishService interface {
 	// Calling this method will not trigger OnMsgArrived hook.
 	PublishToClient(clientID string, message packets.Message, match bool)
 }
+
 type publishService struct {
 	server *server
 }

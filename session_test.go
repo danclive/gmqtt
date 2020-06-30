@@ -24,7 +24,8 @@ func mockClient() *client {
 	config.MaxMsgQueue = testMaxMsgQueueLen
 	config.MaxAwaitRel = testMaxAwaitRelLen
 	b := NewServer(WithConfig(config))
-	c := b.newClient(nil)
+	s := b.(*server)
+	c := s.newClient(nil)
 	c.opts.cleanSession = true
 	c.newSession()
 	return c

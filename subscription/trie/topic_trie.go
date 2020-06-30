@@ -47,14 +47,17 @@ func (t *topicNode) newChild() *topicNode {
 func (t *topicTrie) subscribe(clientID string, topic packets.Topic) *topicNode {
 	topicSlice := strings.Split(topic.Name, "/")
 	var pNode = t
+
 	for _, lv := range topicSlice {
 		if _, ok := pNode.children[lv]; !ok {
 			pNode.children[lv] = pNode.newChild()
 		}
 		pNode = pNode.children[lv]
 	}
+
 	pNode.clients[clientID] = topic.Qos
 	pNode.topicName = topic.Name
+
 	return pNode
 }
 
@@ -63,6 +66,7 @@ func (t *topicTrie) subscribe(clientID string, topic packets.Topic) *topicNode {
 func (t *topicTrie) find(topicFilter string) *topicNode {
 	topicSlice := strings.Split(topicFilter, "/")
 	var pNode = t
+
 	for _, lv := range topicSlice {
 		if _, ok := pNode.children[lv]; ok {
 			pNode = pNode.children[lv]
@@ -70,6 +74,7 @@ func (t *topicTrie) find(topicFilter string) *topicNode {
 			return nil
 		}
 	}
+
 	if pNode.topicName == topicFilter {
 		return pNode
 	}
@@ -81,6 +86,7 @@ func (t *topicTrie) unsubscribe(clientID string, topicName string) {
 	topicSlice := strings.Split(topicName, "/")
 	l := len(topicSlice)
 	var pNode = t
+
 	for _, lv := range topicSlice {
 		if _, ok := pNode.children[lv]; ok {
 			pNode = pNode.children[lv]
@@ -88,7 +94,9 @@ func (t *topicTrie) unsubscribe(clientID string, topicName string) {
 			return
 		}
 	}
+
 	delete(pNode.clients, clientID)
+
 	if len(pNode.clients) == 0 && len(pNode.children) == 0 {
 		delete(pNode.parent.children, topicSlice[l-1])
 	}
@@ -111,9 +119,11 @@ func setRs(node *topicNode, rs subscription.ClientTopics) {
 // matchTopic get all matched topic for given topicSlice, and set into rs
 func (t *topicTrie) matchTopic(topicSlice []string, rs subscription.ClientTopics) {
 	endFlag := len(topicSlice) == 1
+
 	if cnode := t.children["#"]; cnode != nil {
 		setRs(cnode, rs)
 	}
+
 	if cnode := t.children["+"]; cnode != nil {
 		if endFlag {
 			setRs(cnode, rs)
@@ -124,6 +134,7 @@ func (t *topicTrie) matchTopic(topicSlice []string, rs subscription.ClientTopics
 			cnode.matchTopic(topicSlice[1:], rs)
 		}
 	}
+
 	if cnode := t.children[topicSlice[0]]; cnode != nil {
 		if endFlag {
 			setRs(cnode, rs)
@@ -152,6 +163,7 @@ func (t *topicTrie) preOrderTraverse(fn subscription.IterateFn) bool {
 	if t == nil {
 		return false
 	}
+
 	if t.topicName != "" {
 		for clientID, qos := range t.clients {
 			if !fn(clientID, packets.Topic{
@@ -162,10 +174,12 @@ func (t *topicTrie) preOrderTraverse(fn subscription.IterateFn) bool {
 			}
 		}
 	}
+
 	for _, c := range t.children {
 		if !c.preOrderTraverse(fn) {
 			return false
 		}
 	}
+
 	return true
 }

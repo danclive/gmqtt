@@ -51,30 +51,36 @@ type awaitRelElem struct {
 //setAwaitRel 入队,
 func (client *client) setAwaitRel(pid packets.PacketID) {
 	s := client.session
+
 	s.awaitRelMu.Lock()
 	defer s.awaitRelMu.Unlock()
+
 	elem := &awaitRelElem{
 		at:  time.Now(),
 		pid: pid,
 	}
+
 	if s.awaitRel.Len() >= s.config.MaxAwaitRel && s.config.MaxAwaitRel != 0 { //加入缓存队列
 		removeMsg := s.awaitRel.Front()
 		s.awaitRel.Remove(removeMsg)
+
 		zaplog.Info("awaitRel window is full, removing the front elem",
 			zap.String("clientID", client.opts.clientID),
 			zap.Int16("pid", int16(pid)))
 	} else {
 		client.statsManager.addAwaitCurrent(1)
 	}
-	s.awaitRel.PushBack(elem)
 
+	s.awaitRel.PushBack(elem)
 }
 
 //unsetAwaitRel
 func (client *client) unsetAwaitRel(pid packets.PacketID) {
 	s := client.session
+
 	s.awaitRelMu.Lock()
 	defer s.awaitRelMu.Unlock()
+
 	for e := s.awaitRel.Front(); e != nil; e = e.Next() {
 		if el, ok := e.Value.(*awaitRelElem); ok {
 			if el.pid == pid {
@@ -100,8 +106,10 @@ func (client *client) unsetAwaitRel(pid packets.PacketID) {
 func (client *client) msgEnQueue(publish *packets.Publish) {
 	s := client.session
 	srv := client.server
+
 	s.msgQueueMu.Lock()
 	defer s.msgQueueMu.Unlock()
+
 	if s.msgQueue.Len() >= s.config.MaxMsgQueue && s.config.MaxMsgQueue != 0 {
 		var removeMsg *list.Element
 		// onMessageDropped hook
@@ -115,6 +123,7 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 				}
 			}()
 		}
+
 		for e := s.msgQueue.Front(); e != nil; e = e.Next() {
 			if pub, ok := e.Value.(*packets.Publish); ok {
 				if pub.Qos == packets.QOS_0 {
@@ -123,12 +132,14 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 				}
 			}
 		}
+
 		if removeMsg != nil { //case1: removing qos0 message in the msgQueue
 			zaplog.Info("message queue is full, removing msg",
 				zap.String("clientID", client.opts.clientID),
 				zap.String("type", "QOS_0 in queue"),
 				zap.String("packet", removeMsg.Value.(packets.Packet).String()),
 			)
+
 			s.msgQueue.Remove(removeMsg)
 			client.server.statsManager.messageDropped(0)
 			client.statsManager.messageDropped(0)
@@ -138,17 +149,21 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 				zap.String("type", "QOS_0 enqueue"),
 				zap.String("packet", publish.String()),
 			)
+
 			client.server.statsManager.messageDropped(0)
 			client.statsManager.messageDropped(0)
+
 			return
 		} else { //case3: removing the front message of msgQueue
 			removeMsg = s.msgQueue.Front()
 			s.msgQueue.Remove(removeMsg)
+
 			zaplog.Info("message queue is full, removing msg",
 				zap.String("clientID", client.opts.clientID),
 				zap.String("type", "front"),
 				zap.String("packet", removeMsg.Value.(packets.Packet).String()),
 			)
+
 			client.server.statsManager.messageDropped(removeMsg.Value.(*packets.Publish).Qos)
 			client.statsManager.messageDropped(removeMsg.Value.(*packets.Publish).Qos)
 		}
@@ -156,32 +171,38 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 		client.server.statsManager.messageEnqueue(1)
 		client.statsManager.messageEnqueue(1)
 	}
+
 	s.msgQueue.PushBack(publish)
 }
 
 func (client *client) msgDequeue() *packets.Publish {
 	s := client.session
+
 	s.msgQueueMu.Lock()
 	defer s.msgQueueMu.Unlock()
 
 	if s.msgQueue.Len() > 0 {
 		queueElem := s.msgQueue.Front()
+
 		zaplog.Debug("msg dequeued",
 			zap.String("clientID", client.opts.clientID),
 			zap.String("packet", queueElem.Value.(*packets.Publish).String()))
 
 		s.msgQueue.Remove(queueElem)
+
 		client.statsManager.messageDequeue(1)
 		client.server.statsManager.messageDequeue(1)
+
 		return queueElem.Value.(*packets.Publish)
 	}
-	return nil
 
+	return nil
 }
 
 //inflight 入队,inflight队列满，放入缓存队列，缓存队列满，删除最早进入缓存队列的内容
 func (client *client) setInflight(publish *packets.Publish) (enqueue bool) {
 	s := client.session
+
 	s.inflightMu.Lock()
 	defer func() {
 		s.inflightMu.Unlock()
@@ -189,22 +210,29 @@ func (client *client) setInflight(publish *packets.Publish) (enqueue bool) {
 			client.statsManager.addInflightCurrent(1)
 		}
 	}()
+
 	elem := &inflightElem{
 		at:     time.Now(),
 		packet: publish,
 	}
+
 	if s.inflight.Len() >= s.config.MaxInflight && s.config.MaxInflight != 0 { //加入缓存队列
 		zaplog.Info("inflight window full, saving msg into msgQueue",
 			zap.String("clientID", client.opts.clientID),
 			zap.String("packet", elem.packet.String()),
 		)
+
 		client.msgEnQueue(publish)
 		enqueue = false
+
 		return
 	}
+
 	zaplog.Debug("set inflight", zap.String("clientID", client.opts.clientID), zap.String("packet", elem.packet.String()))
+
 	s.inflight.PushBack(elem)
 	enqueue = true
+
 	return
 }
 
@@ -213,10 +241,13 @@ func (client *client) setInflight(publish *packets.Publish) (enqueue bool) {
 func (client *client) unsetInflight(packet packets.Packet) {
 	s := client.session
 	srv := client.server
+
 	s.inflightMu.Lock()
 	defer s.inflightMu.Unlock()
+
 	var freeID bool
 	var pid packets.PacketID
+
 	for e := s.inflight.Front(); e != nil; e = e.Next() {
 		if el, ok := e.Value.(*inflightElem); ok {
 			switch packet.(type) {
@@ -224,41 +255,49 @@ func (client *client) unsetInflight(packet packets.Packet) {
 				if el.packet.Qos != packets.QOS_1 {
 					continue
 				}
+
 				pid = packet.(*packets.Puback).PacketID
 				freeID = true
 			case *packets.Pubrec: //QOS2
 				if el.packet.Qos != packets.QOS_2 {
 					continue
 				}
+
 				pid = packet.(*packets.Pubrec).PacketID
 			}
+
 			if el.packet.PacketID == pid {
 				s.inflight.Remove(e)
 				client.statsManager.decInflightCurrent(1)
+
 				zaplog.Debug("unset inflight", zap.String("clientID", client.opts.clientID),
 					zap.String("packet", packet.String()),
 				)
+
 				if freeID {
 					s.freePacketID(pid)
 				}
+
 				// onAcked hook
 				if srv.hooks.OnAcked != nil {
 					srv.hooks.OnAcked(context.Background(), client, messageFromPublish(e.Value.(*inflightElem).packet))
 				}
+
 				publish := client.msgDequeue()
 				if publish != nil {
 					elem := &inflightElem{
 						at:     time.Now(),
 						packet: publish,
 					}
+
 					s.inflight.PushBack(elem)
 					client.sendMsg(publish)
 				}
+
 				return
 			}
 		}
 	}
-
 }
 
 func (s *session) freePacketID(id packets.PacketID) {
@@ -276,16 +315,20 @@ func (s *session) setPacketID(id packets.PacketID) {
 func (s *session) getPacketID() packets.PacketID {
 	s.pidMu.RLock()
 	defer s.pidMu.RUnlock()
+
 	for s.lockedPid[s.freePid] {
 		s.freePid++
 		if s.freePid > packets.MAX_PACKET_ID {
 			s.freePid = packets.MIN_PACKET_ID
 		}
 	}
+
 	id := s.freePid
 	s.freePid++
+
 	if s.freePid > packets.MAX_PACKET_ID {
 		s.freePid = packets.MIN_PACKET_ID
 	}
+
 	return id
 }

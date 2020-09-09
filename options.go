@@ -15,31 +15,31 @@ func WithConfig(config Config) Options {
 	}
 }
 
-// WithTCPListener set  tcp listener(s) of the server. Default listen on  :1883.
-func WithTCPListener(lns ...net.Listener) Options {
+// WithTCPListener set  tcp listener of the server. Default listen on  :1883.
+func WithTCPListener(listener net.Listener) Options {
 	return func(srv *server) {
-		srv.tcpListener = append(srv.tcpListener, lns...)
+		srv.tcpListener = append(srv.tcpListener, listener)
 	}
 }
 
 // WithWebsocketServer set  websocket server(s) of the server.
-func WithWebsocketServer(ws ...*WsServer) Options {
+func WithWebsocketServer(ws *WsServer) Options {
 	return func(srv *server) {
-		srv.websocketServer = ws
+		srv.websocketServer = append(srv.websocketServer, ws)
 	}
 }
 
 // WithPlugin set plugin(s) of the server.
-func WithPlugin(plugin ...Plugable) Options {
+func WithPlugin(plugin Plugin) Options {
 	return func(srv *server) {
-		srv.plugins = append(srv.plugins, plugin...)
+		srv.plugins = append(srv.plugins, plugin)
 	}
 }
 
 // WithHook set hooks of the server. Notice: WithPlugin() will overwrite hooks.
 func WithHook(hooks Hooks) Options {
 	return func(srv *server) {
-		srv.hooks = hooks
+		srv.hooks = append(srv.hooks, hooks)
 	}
 }
 

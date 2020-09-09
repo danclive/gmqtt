@@ -3,7 +3,7 @@ package mqtt
 import (
 	"sync/atomic"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/danclive/mqtt/subscription"
 )
 

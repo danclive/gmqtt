@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 type mockMsg struct {

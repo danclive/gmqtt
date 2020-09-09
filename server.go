@@ -10,12 +10,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/danclive/nson-go"
+
 	"go.uber.org/zap"
 
 	retained_trie "github.com/danclive/mqtt/retained/trie"
 	subscription_trie "github.com/danclive/mqtt/subscription/trie"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/danclive/mqtt/retained"
 	"github.com/danclive/mqtt/subscription"
 )
@@ -60,7 +62,7 @@ type Server interface {
 	// PublishService returns the PublishService
 	PublishService() PublishService
 	// Client return the client specified by clientID.
-	Client(clientID string) Client
+	Client(clientID string) (Client, bool)
 	// GetConfig returns the config of the server
 	GetConfig() Config
 	// GetStatsManager returns StatsManager
@@ -91,8 +93,8 @@ type server struct {
 	register   chan *register   //register session
 	unregister chan *unregister //unregister session
 	config     Config
-	hooks      Hooks
-	plugins    []Plugable
+	hooks      []Hooks
+	plugins    []Plugin
 
 	statsManager   StatsManager
 	publishService PublishService
@@ -190,8 +192,6 @@ func (srv *server) Status() int32 {
 }
 
 func (srv *server) registerHandler(register *register) {
-	// ack code set in Connack Packet
-	var code uint8
 	client := register.client
 	defer close(client.ready)
 
@@ -207,8 +207,16 @@ func (srv *server) registerHandler(register *register) {
 		return
 	}
 
-	if srv.hooks.OnConnect != nil {
-		code = srv.hooks.OnConnect(context.Background(), client)
+	// ack code set in Connack Packet
+	var code uint8
+
+	for _, hooks := range srv.hooks {
+		if hooks.OnConnect != nil {
+			co := hooks.OnConnect(client)
+			if co > code {
+				code = co
+			}
+		}
 	}
 
 	connect.AckCode = code
@@ -224,8 +232,11 @@ func (srv *server) registerHandler(register *register) {
 		return
 	}
 
-	if srv.hooks.OnConnected != nil {
-		srv.hooks.OnConnected(context.Background(), client)
+	// client 连接后触发
+	for _, hooks := range srv.hooks {
+		if hooks.OnConnected != nil {
+			hooks.OnConnected(client)
+		}
 	}
 
 	// 统计数据
@@ -278,11 +289,21 @@ func (srv *server) registerHandler(register *register) {
 		} else if oldClient.IsDisConnected() {
 			if !client.opts.cleanSession {
 				sessionReuse = true
-			} else if srv.hooks.OnSessionTerminated != nil {
-				srv.hooks.OnSessionTerminated(context.Background(), oldClient, ConflictTermination)
+			} else {
+				// session 终止时触发
+				for _, hooks := range srv.hooks {
+					if hooks.OnSessionTerminated != nil {
+						hooks.OnSessionTerminated(oldClient, ConflictTermination)
+					}
+				}
 			}
-		} else if srv.hooks.OnSessionTerminated != nil {
-			srv.hooks.OnSessionTerminated(context.Background(), oldClient, ConflictTermination)
+		} else {
+			// session 终止时触发
+			for _, hooks := range srv.hooks {
+				if hooks.OnSessionTerminated != nil {
+					hooks.OnSessionTerminated(oldClient, ConflictTermination)
+				}
+			}
 		}
 	}
 
@@ -350,12 +371,18 @@ func (srv *server) registerHandler(register *register) {
 		)
 	}
 	if sessionReuse {
-		if srv.hooks.OnSessionResumed != nil {
-			srv.hooks.OnSessionResumed(context.Background(), client)
+		// session 恢复时触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnSessionResumed != nil {
+				hooks.OnSessionResumed(client)
+			}
 		}
 	} else {
-		if srv.hooks.OnSessionCreated != nil {
-			srv.hooks.OnSessionCreated(context.Background(), client)
+		// session 创建时触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnSessionCreated != nil {
+				hooks.OnSessionCreated(client)
+			}
 		}
 	}
 
@@ -415,8 +442,11 @@ clearIn:
 		srv.removeSession(client.opts.clientID)
 		srv.mu.Unlock()
 
-		if srv.hooks.OnSessionTerminated != nil {
-			srv.hooks.OnSessionTerminated(context.Background(), client, NormalTermination)
+		// session 终止时触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnSessionTerminated != nil {
+				hooks.OnSessionTerminated(client, NormalTermination)
+			}
 		}
 
 		// 统计数据
@@ -543,9 +573,14 @@ func (srv *server) sessionExpireCheck() {
 		if now.Sub(disconnectedAt) >= expire {
 			if client, _ := srv.clients[id]; client != nil {
 				srv.removeSession(id)
-				if srv.hooks.OnSessionTerminated != nil {
-					srv.hooks.OnSessionTerminated(context.Background(), client, ExpiredTermination)
+
+				// session 终止时触发
+				for _, hooks := range srv.hooks {
+					if hooks.OnSessionTerminated != nil {
+						hooks.OnSessionTerminated(client, ExpiredTermination)
+					}
 				}
+
 				srv.statsManager.addSessionExpired()
 				srv.statsManager.decSessionInactive()
 			}
@@ -599,6 +634,7 @@ func NewServer(opts ...Options) Server {
 		subscriptionsDB: subStore,
 		config:          DefaultConfig,
 		statsManager:    statsMgr,
+		hooks:           make([]Hooks, 0),
 	}
 
 	srv.publishService = &publishService{server: srv}
@@ -618,10 +654,11 @@ func (srv *server) Init(opts ...Options) {
 }
 
 // Client returns the client for given clientID
-func (srv *server) Client(clientID string) Client {
+func (srv *server) Client(clientID string) (Client, bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	return srv.clients[clientID]
+	client, has := srv.clients[clientID]
+	return client, has
 }
 
 func (srv *server) serveTCP(l net.Listener) {
@@ -631,7 +668,7 @@ func (srv *server) serveTCP(l net.Listener) {
 
 	var tempDelay time.Duration
 	for {
-		rw, e := l.Accept()
+		conn, e := l.Accept()
 		if e != nil {
 			if ne, ok := e.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -648,15 +685,17 @@ func (srv *server) serveTCP(l net.Listener) {
 			return
 		}
 
-		// onAccept hooks
-		if srv.hooks.OnAccept != nil {
-			if !srv.hooks.OnAccept(context.Background(), rw) {
-				rw.Close()
-				continue
+		// tcp 建立连接时触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnAccept != nil {
+				if !hooks.OnAccept(conn) {
+					conn.Close()
+					continue
+				}
 			}
 		}
 
-		client := srv.newClient(rw)
+		client := srv.newClient(conn)
 		go client.serve()
 	}
 }
@@ -677,6 +716,7 @@ func (srv *server) newClient(c net.Conn) *client {
 		cleanWillFlag: false,
 		ready:         make(chan struct{}),
 		statsManager:  newSessionStatsManager(),
+		userData:      make(map[string]nson.Value),
 	}
 
 	client.packetReader = packets.NewReader(client.bufr)
@@ -689,208 +729,14 @@ func (srv *server) newClient(c net.Conn) *client {
 }
 
 func (srv *server) loadPlugins() error {
-	var (
-		onAcceptWrappers           []OnAcceptWrapper
-		onConnectWrappers          []OnConnectWrapper
-		onConnectedWrappers        []OnConnectedWrapper
-		onSessionCreatedWrapper    []OnSessionCreatedWrapper
-		onSessionResumedWrapper    []OnSessionResumedWrapper
-		onSessionTerminatedWrapper []OnSessionTerminatedWrapper
-		onSubscribeWrappers        []OnSubscribeWrapper
-		onSubscribedWrappers       []OnSubscribedWrapper
-		onUnsubscribedWrappers     []OnUnsubscribedWrapper
-		onMsgArrivedWrappers       []OnMsgArrivedWrapper
-		onDeliverWrappers          []OnDeliverWrapper
-		onAckedWrappers            []OnAckedWrapper
-		onCloseWrappers            []OnCloseWrapper
-		onStopWrappers             []OnStopWrapper
-		onMsgDroppedWrappers       []OnMsgDroppedWrapper
-	)
 	for _, p := range srv.plugins {
 		zaplog.Info("loading plugin", zap.String("name", p.Name()))
 		err := p.Load(srv)
 		if err != nil {
 			return err
 		}
-		hooks := p.HookWrapper()
-		// init all hook wrappers
-		if hooks.OnAcceptWrapper != nil {
-			onAcceptWrappers = append(onAcceptWrappers, hooks.OnAcceptWrapper)
-		}
-		if hooks.OnConnectWrapper != nil {
-			onConnectWrappers = append(onConnectWrappers, hooks.OnConnectWrapper)
-		}
-		if hooks.OnConnectedWrapper != nil {
-			onConnectedWrappers = append(onConnectedWrappers, hooks.OnConnectedWrapper)
-		}
-		if hooks.OnSessionCreatedWrapper != nil {
-			onSessionCreatedWrapper = append(onSessionCreatedWrapper, hooks.OnSessionCreatedWrapper)
-		}
-		if hooks.OnSessionResumedWrapper != nil {
-			onSessionResumedWrapper = append(onSessionResumedWrapper, hooks.OnSessionResumedWrapper)
-		}
-		if hooks.OnSessionTerminatedWrapper != nil {
-			onSessionTerminatedWrapper = append(onSessionTerminatedWrapper, hooks.OnSessionTerminatedWrapper)
-		}
-		if hooks.OnSubscribeWrapper != nil {
-			onSubscribeWrappers = append(onSubscribeWrappers, hooks.OnSubscribeWrapper)
-		}
-		if hooks.OnSubscribedWrapper != nil {
-			onSubscribedWrappers = append(onSubscribedWrappers, hooks.OnSubscribedWrapper)
-		}
-		if hooks.OnUnsubscribedWrapper != nil {
-			onUnsubscribedWrappers = append(onUnsubscribedWrappers, hooks.OnUnsubscribedWrapper)
-		}
-		if hooks.OnMsgArrivedWrapper != nil {
-			onMsgArrivedWrappers = append(onMsgArrivedWrappers, hooks.OnMsgArrivedWrapper)
-		}
-		if hooks.OnMsgDroppedWrapper != nil {
-			onMsgDroppedWrappers = append(onMsgDroppedWrappers, hooks.OnMsgDroppedWrapper)
-		}
-		if hooks.OnDeliverWrapper != nil {
-			onDeliverWrappers = append(onDeliverWrappers, hooks.OnDeliverWrapper)
-		}
-		if hooks.OnAckedWrapper != nil {
-			onAckedWrappers = append(onAckedWrappers, hooks.OnAckedWrapper)
-		}
-		if hooks.OnCloseWrapper != nil {
-			onCloseWrappers = append(onCloseWrappers, hooks.OnCloseWrapper)
-		}
-		if hooks.OnStopWrapper != nil {
-			onStopWrappers = append(onStopWrappers, hooks.OnStopWrapper)
-		}
-	}
-	// onAccept
-	if onAcceptWrappers != nil {
-		onAccept := func(ctx context.Context, conn net.Conn) bool {
-			return true
-		}
-		for i := len(onAcceptWrappers); i > 0; i-- {
-			onAccept = onAcceptWrappers[i-1](onAccept)
-		}
-		srv.hooks.OnAccept = onAccept
-	}
-	// onConnect
-	if onConnectWrappers != nil {
-		onConnect := func(ctx context.Context, client Client) (code uint8) {
-			return packets.CodeAccepted
-		}
-		for i := len(onConnectWrappers); i > 0; i-- {
-			onConnect = onConnectWrappers[i-1](onConnect)
-		}
-		srv.hooks.OnConnect = onConnect
-	}
-	// onConnected
-	if onConnectedWrappers != nil {
-		onConnected := func(ctx context.Context, client Client) {}
-		for i := len(onConnectedWrappers); i > 0; i-- {
-			onConnected = onConnectedWrappers[i-1](onConnected)
-		}
-		srv.hooks.OnConnected = onConnected
-	}
-	// onSessionCreated
-	if onSessionCreatedWrapper != nil {
-		onSessionCreated := func(ctx context.Context, client Client) {}
-		for i := len(onSessionCreatedWrapper); i > 0; i-- {
-			onSessionCreated = onSessionCreatedWrapper[i-1](onSessionCreated)
-		}
-		srv.hooks.OnSessionCreated = onSessionCreated
-	}
 
-	// onSessionResumed
-	if onSessionResumedWrapper != nil {
-		onSessionResumed := func(ctx context.Context, client Client) {}
-		for i := len(onSessionResumedWrapper); i > 0; i-- {
-			onSessionResumed = onSessionResumedWrapper[i-1](onSessionResumed)
-		}
-		srv.hooks.OnSessionResumed = onSessionResumed
-	}
-
-	// onSessionTerminated
-	if onSessionTerminatedWrapper != nil {
-		onSessionTerminated := func(ctx context.Context, client Client, reason SessionTerminatedReason) {}
-		for i := len(onSessionTerminatedWrapper); i > 0; i-- {
-			onSessionTerminated = onSessionTerminatedWrapper[i-1](onSessionTerminated)
-		}
-		srv.hooks.OnSessionTerminated = onSessionTerminated
-	}
-
-	// onSubscribe
-	if onSubscribeWrappers != nil {
-		onSubscribe := func(ctx context.Context, client Client, topic packets.Topic) (qos uint8) {
-			return topic.Qos
-		}
-		for i := len(onSubscribeWrappers); i > 0; i-- {
-			onSubscribe = onSubscribeWrappers[i-1](onSubscribe)
-		}
-		srv.hooks.OnSubscribe = onSubscribe
-	}
-	// onSubscribed
-	if onSubscribedWrappers != nil {
-		onSubscribed := func(ctx context.Context, client Client, topic packets.Topic) {}
-		for i := len(onSubscribedWrappers); i > 0; i-- {
-			onSubscribed = onSubscribedWrappers[i-1](onSubscribed)
-		}
-		srv.hooks.OnSubscribed = onSubscribed
-	}
-	//onUnsubscribed
-	if onUnsubscribedWrappers != nil {
-		onUnsubscribed := func(ctx context.Context, client Client, topicName string) {}
-		for i := len(onUnsubscribedWrappers); i > 0; i-- {
-			onUnsubscribed = onUnsubscribedWrappers[i-1](onUnsubscribed)
-		}
-		srv.hooks.OnUnsubscribed = onUnsubscribed
-	}
-	// onMsgArrived
-	if onMsgArrivedWrappers != nil {
-		onMsgArrived := func(ctx context.Context, client Client, msg packets.Message) (valid bool) {
-			return true
-		}
-		for i := len(onMsgArrivedWrappers); i > 0; i-- {
-			onMsgArrived = onMsgArrivedWrappers[i-1](onMsgArrived)
-		}
-		srv.hooks.OnMsgArrived = onMsgArrived
-	}
-	// onDeliver
-	if onDeliverWrappers != nil {
-		onDeliver := func(ctx context.Context, client Client, msg packets.Message) {}
-		for i := len(onDeliverWrappers); i > 0; i-- {
-			onDeliver = onDeliverWrappers[i-1](onDeliver)
-		}
-		srv.hooks.OnDeliver = onDeliver
-	}
-	// onAcked
-	if onAckedWrappers != nil {
-		onAcked := func(ctx context.Context, client Client, msg packets.Message) {}
-		for i := len(onAckedWrappers); i > 0; i-- {
-			onAcked = onAckedWrappers[i-1](onAcked)
-		}
-		srv.hooks.OnAcked = onAcked
-	}
-	// onClose hooks
-	if onCloseWrappers != nil {
-		onClose := func(ctx context.Context, client Client, err error) {}
-		for i := len(onCloseWrappers); i > 0; i-- {
-			onClose = onCloseWrappers[i-1](onClose)
-		}
-		srv.hooks.OnClose = onClose
-	}
-	// onStop
-	if onStopWrappers != nil {
-		onStop := func(ctx context.Context) {}
-		for i := len(onStopWrappers); i > 0; i-- {
-			onStop = onStopWrappers[i-1](onStop)
-		}
-		srv.hooks.OnStop = onStop
-	}
-
-	// onMsgDropped
-	if onMsgDroppedWrappers != nil {
-		onMsgDropped := func(ctx context.Context, client Client, msg packets.Message) {}
-		for i := len(onMsgDroppedWrappers); i > 0; i-- {
-			onMsgDropped = onMsgDroppedWrappers[i-1](onMsgDropped)
-		}
-		srv.hooks.OnMsgDropped = onMsgDropped
+		srv.hooks = append(srv.hooks, p.Hooks())
 	}
 
 	return nil
@@ -990,16 +836,20 @@ func (srv *server) Stop(ctx context.Context) error {
 		zaplog.Warn("server stop timeout, forced exit", zap.String("error", ctx.Err().Error()))
 		return ctx.Err()
 	case <-done:
+		// server 停止后触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnStop != nil {
+				hooks.OnStop()
+			}
+		}
+
 		for _, v := range srv.plugins {
 			err := v.Unload()
 			if err != nil {
 				zaplog.Warn("plugin unload error", zap.String("error", err.Error()))
 			}
 		}
-		if srv.hooks.OnStop != nil {
-			srv.hooks.OnStop(context.Background())
-		}
+
 		return nil
 	}
-
 }

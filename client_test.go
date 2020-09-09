@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -130,6 +130,7 @@ func newTestServer() *server {
 	}
 	ln := &testListener{acceptReady: make(chan struct{})}
 	s.tcpListener = append(s.tcpListener, ln)
+	s.hooks = make([]Hooks, 0)
 	return s
 }
 
@@ -795,15 +796,21 @@ func TestUnsubscribe(t *testing.T) {
 
 func TestOnSubscribe(t *testing.T) {
 	srv := newTestServer()
-	srv.hooks.OnSubscribe = func(ctx context.Context, client Client, topic packets.Topic) (qos uint8) {
-		if topic.Qos == packets.QOS_0 {
-			return packets.QOS_1
-		}
-		if topic.Name == "/a/b/+" {
-			return packets.SUBSCRIBE_FAILURE
-		}
-		return topic.Qos
+
+	hooks := Hooks{
+		OnSubscribe: func(client Client, topic packets.Topic) (qos uint8) {
+			if topic.Qos == packets.QOS_0 {
+				return packets.QOS_1
+			}
+			if topic.Name == "/a/b/+" {
+				return packets.SUBSCRIBE_FAILURE
+			}
+			return topic.Qos
+		},
 	}
+
+	srv.hooks = append(srv.hooks, hooks)
+
 	conn := doconnect(srv, nil)
 	defer srv.Stop(context.Background())
 	c := conn.(*rwTestConn)

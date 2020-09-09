@@ -3,7 +3,7 @@ package trie
 import (
 	"sync"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/danclive/mqtt/retained"
 )
 

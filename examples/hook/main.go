@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/danclive/mqtt"
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 var validUserMu sync.Mutex

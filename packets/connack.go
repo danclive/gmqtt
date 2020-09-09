@@ -29,14 +29,17 @@ func (c *Connack) String() string {
 // Pack encodes the packet struct into bytes and writes it into io.Writer.
 func (c *Connack) Pack(w io.Writer) error {
 	var err error
+
 	c.FixHeader = &FixHeader{PacketType: CONNACK, Flags: FLAG_RESERVED, RemainLength: 2}
 	err = c.FixHeader.Pack(w)
 	if err != nil {
 		return err
 	}
+
 	b := make([]byte, 2)
 	b[0] = byte(c.SessionPresent)
 	b[1] = c.Code
+
 	_, err = w.Write(b)
 	return err
 }
@@ -44,18 +47,23 @@ func (c *Connack) Pack(w io.Writer) error {
 // Unpack read the packet bytes from io.Reader and decodes it into the packet struct
 func (c *Connack) Unpack(r io.Reader) error {
 	restBuffer := make([]byte, c.FixHeader.RemainLength)
+
 	_, err := io.ReadFull(r, restBuffer)
 	if err != nil {
 		return err
 	}
+
 	if (127 & (restBuffer[0] >> 1)) > 0 {
 		return ErrInvalConnAcknowledgeFlags
 	}
+
 	if restBuffer[1] > 0 && restBuffer[0] != CodeAccepted { //[MQTT-3.2.2-4]
 		return ErrInvalSessionPresent
 	}
+
 	c.SessionPresent = int(restBuffer[0])
 	c.Code = restBuffer[1]
+
 	return nil
 }
 

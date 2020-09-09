@@ -2,13 +2,12 @@ package mqtt
 
 import (
 	"container/list"
-	"context"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 type session struct {
@@ -105,24 +104,12 @@ func (client *client) unsetAwaitRel(pid packets.PacketID) {
 //3. the front message of msgQueue
 func (client *client) msgEnQueue(publish *packets.Publish) {
 	s := client.session
-	srv := client.server
 
 	s.msgQueueMu.Lock()
 	defer s.msgQueueMu.Unlock()
 
 	if s.msgQueue.Len() >= s.config.MaxMsgQueue && s.config.MaxMsgQueue != 0 {
 		var removeMsg *list.Element
-		// onMessageDropped hook
-		if srv.hooks.OnMsgDropped != nil {
-			defer func() {
-				cs := context.Background()
-				if removeMsg != nil {
-					srv.hooks.OnMsgDropped(cs, client, messageFromPublish(removeMsg.Value.(*packets.Publish)))
-				} else {
-					srv.hooks.OnMsgDropped(cs, client, messageFromPublish(publish))
-				}
-			}()
-		}
 
 		for e := s.msgQueue.Front(); e != nil; e = e.Next() {
 			if pub, ok := e.Value.(*packets.Publish); ok {
@@ -153,6 +140,17 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 			client.server.statsManager.messageDropped(0)
 			client.statsManager.messageDropped(0)
 
+			// 丢弃消息后触发
+			for _, hooks := range client.server.hooks {
+				if hooks.OnMsgDropped != nil {
+					if removeMsg != nil {
+						hooks.OnMsgDropped(client, messageFromPublish(removeMsg.Value.(*packets.Publish)))
+					} else {
+						hooks.OnMsgDropped(client, messageFromPublish(publish))
+					}
+				}
+			}
+
 			return
 		} else { //case3: removing the front message of msgQueue
 			removeMsg = s.msgQueue.Front()
@@ -167,6 +165,18 @@ func (client *client) msgEnQueue(publish *packets.Publish) {
 			client.server.statsManager.messageDropped(removeMsg.Value.(*packets.Publish).Qos)
 			client.statsManager.messageDropped(removeMsg.Value.(*packets.Publish).Qos)
 		}
+
+		// 丢弃消息后触发
+		for _, hooks := range client.server.hooks {
+			if hooks.OnMsgDropped != nil {
+				if removeMsg != nil {
+					hooks.OnMsgDropped(client, messageFromPublish(removeMsg.Value.(*packets.Publish)))
+				} else {
+					hooks.OnMsgDropped(client, messageFromPublish(publish))
+				}
+			}
+		}
+
 	} else {
 		client.server.statsManager.messageEnqueue(1)
 		client.statsManager.messageEnqueue(1)
@@ -278,9 +288,11 @@ func (client *client) unsetInflight(packet packets.Packet) {
 					s.freePacketID(pid)
 				}
 
-				// onAcked hook
-				if srv.hooks.OnAcked != nil {
-					srv.hooks.OnAcked(context.Background(), client, messageFromPublish(e.Value.(*inflightElem).packet))
+				// 消息确认时触发
+				for _, hooks := range srv.hooks {
+					if hooks.OnAcked != nil {
+						hooks.OnAcked(client, messageFromPublish(e.Value.(*inflightElem).packet))
+					}
 				}
 
 				publish := client.msgDequeue()

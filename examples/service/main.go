@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/danclive/mqtt"
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 func main() {

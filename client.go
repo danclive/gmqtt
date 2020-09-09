@@ -4,7 +4,6 @@ package mqtt
 import (
 	"bufio"
 	"container/list"
-	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/binary"
@@ -17,7 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/nson-go"
+
+	"github.com/danclive/mqtt/packets"
 	"go.uber.org/zap"
 )
 
@@ -91,6 +92,11 @@ type Client interface {
 	Close() <-chan struct{}
 
 	GetSessionStatsManager() SessionStatsManager
+
+	// 自定义数据
+	Get(key string) (nson.Value, bool)
+	Set(key string, value nson.Value)
+	Del(key string)
 }
 
 // Client represents a MQTT client and implements the Client interface
@@ -110,20 +116,45 @@ type client struct {
 	session       *session
 	error         chan error //错误
 	err           error
-	opts          *options //OnConnect之前填充,set up before OnConnect()
-	cleanWillFlag bool     //收到DISCONNECT报文删除遗嘱标志, whether to remove will msg
-	//自定义数据
-	keys  map[string]interface{}
-	ready chan struct{} //close after session prepared
+	opts          *options      //OnConnect之前填充,set up before OnConnect()
+	cleanWillFlag bool          //收到DISCONNECT报文删除遗嘱标志, whether to remove will msg
+	ready         chan struct{} //close after session prepared
 
+	_              [4]byte // BUG!!!, 字节对齐
 	connectedAt    int64
 	disconnectedAt int64
 
 	statsManager SessionStatsManager
+
+	//自定义数据
+	userData     map[string]nson.Value
+	userDataLock sync.Mutex
 }
 
 func (client *client) GetSessionStatsManager() SessionStatsManager {
 	return client.statsManager
+}
+
+func (client *client) Get(key string) (nson.Value, bool) {
+	client.userDataLock.Lock()
+	defer client.userDataLock.Unlock()
+
+	v, has := client.userData[key]
+	return v, has
+}
+
+func (client *client) Set(key string, value nson.Value) {
+	client.userDataLock.Lock()
+	defer client.userDataLock.Unlock()
+
+	client.userData[key] = value
+}
+
+func (client *client) Del(key string) {
+	client.userDataLock.Lock()
+	defer client.userDataLock.Unlock()
+
+	delete(client.userData, key)
 }
 
 func (client *client) setConnectedAt(time time.Time) {
@@ -397,7 +428,7 @@ func (client *client) Close() <-chan struct{} {
 }
 
 var pid = os.Getpid()
-var counter uint32
+var counter = uint32(time.Now().Nanosecond())
 var machineId = readMachineId()
 
 func readMachineId() []byte {
@@ -416,7 +447,7 @@ func readMachineId() []byte {
 	return id
 }
 
-func getRandomUUID() string {
+func RandomID() string {
 	var b [12]byte
 	// Timestamp, 4 bytes, big endian
 	binary.BigEndian.PutUint32(b[:], uint32(time.Now().Unix()))
@@ -470,7 +501,7 @@ func (client *client) connectWithTimeOut() (ok bool) {
 
 	client.opts.clientID = string(conn.ClientID)
 	if client.opts.clientID == "" {
-		client.opts.clientID = getRandomUUID()
+		client.opts.clientID = RandomID()
 	}
 
 	client.opts.keepAlive = conn.KeepAlive
@@ -537,9 +568,11 @@ func (client *client) internalClose() {
 	putBufioReader(client.bufr)
 	putBufioWriter(client.bufw)
 
-	// onClose hooks
-	if client.server.hooks.OnClose != nil {
-		client.server.hooks.OnClose(context.Background(), client, client.err)
+	// 客户端关闭时触发
+	for _, hooks := range client.server.hooks {
+		if hooks.OnClose != nil {
+			hooks.OnClose(client, client.err)
+		}
 	}
 
 	client.setDisconnectedAt(time.Now())
@@ -572,9 +605,11 @@ func (client *client) sendMsg(publish *packets.Publish) {
 	case <-client.close:
 		return
 	case client.out <- publish:
-		// onDeliver hook
-		if client.server.hooks.OnDeliver != nil {
-			client.server.hooks.OnDeliver(context.Background(), client, messageFromPublish(publish))
+		// 分发消息时触发
+		for _, hooks := range client.server.hooks {
+			if hooks.OnDeliver != nil {
+				hooks.OnDeliver(client, messageFromPublish(publish))
+			}
 		}
 	}
 }
@@ -599,10 +634,17 @@ func (client *client) write(packets packets.Packet) {
 func (client *client) subscribeHandler(sub *packets.Subscribe) {
 	srv := client.server
 
-	if srv.hooks.OnSubscribe != nil {
-		for k, v := range sub.Topics {
-			qos := srv.hooks.OnSubscribe(context.Background(), client, v)
-			sub.Topics[k].Qos = qos
+	// 订阅之前触发
+	for _, hooks := range srv.hooks {
+		if hooks.OnSubscribe != nil {
+			for k, v := range sub.Topics {
+				var qos uint8
+				q := hooks.OnSubscribe(client, v)
+				if q > qos {
+					qos = q
+				}
+				sub.Topics[k].Qos = qos
+			}
 		}
 	}
 
@@ -619,8 +661,11 @@ func (client *client) subscribeHandler(sub *packets.Subscribe) {
 
 			srv.subscriptionsDB.Subscribe(client.opts.clientID, topic)
 
-			if srv.hooks.OnSubscribed != nil {
-				srv.hooks.OnSubscribed(context.Background(), client, topic)
+			// 订阅之后触发
+			for _, hooks := range client.server.hooks {
+				if hooks.OnSubscribed != nil {
+					hooks.OnSubscribed(client, topic)
+				}
 			}
 
 			zaplog.Info("subscribe succeeded",
@@ -682,22 +727,24 @@ func (client *client) publishHandler(pub *packets.Publish) {
 	}
 
 	if !dup {
-		var valid = true
-
-		if srv.hooks.OnMsgArrived != nil {
-			valid = srv.hooks.OnMsgArrived(context.Background(), client, msg)
-		}
-
-		if valid {
-			pub.Retain = false
-			msgRouter := &msgRouter{msg: messageFromPublish(pub), match: true}
-
-			select {
-			case <-client.close:
-				return
-			case client.server.msgRouter <- msgRouter:
+		// 消息到达之后触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnMsgArrived != nil {
+				if !hooks.OnMsgArrived(client, msg) {
+					return
+				}
 			}
 		}
+
+		pub.Retain = false
+		msgRouter := &msgRouter{msg: messageFromPublish(pub), match: true}
+
+		select {
+		case <-client.close:
+			return
+		case client.server.msgRouter <- msgRouter:
+		}
+
 	}
 }
 
@@ -735,8 +782,11 @@ func (client *client) unsubscribeHandler(unSub *packets.Unsubscribe) {
 	for _, topicName := range unSub.Topics {
 		srv.subscriptionsDB.Unsubscribe(client.opts.clientID, topicName)
 
-		if srv.hooks.OnUnsubscribed != nil {
-			srv.hooks.OnUnsubscribed(context.Background(), client, topicName)
+		// 取消订阅之后触发
+		for _, hooks := range srv.hooks {
+			if hooks.OnUnsubscribed != nil {
+				hooks.OnUnsubscribed(client, topicName)
+			}
 		}
 
 		zaplog.Info("unsubscribed",
@@ -820,19 +870,24 @@ func (client *client) redeliver() {
 		case <-timer.C: //重发ticker
 			now := time.Now()
 			s.inflightMu.Lock()
+
 			for inflight := s.inflight.Front(); inflight != nil; inflight = inflight.Next() {
 				if inflight, ok := inflight.Value.(*inflightElem); ok {
 					if now.Sub(inflight.at) >= retryInterval {
 						pub := inflight.packet
+
 						p := pub.CopyPublish()
 						p.Dup = true
+
 						client.write(p)
 					}
 				}
 			}
+
 			s.inflightMu.Unlock()
 
 			s.awaitRelMu.Lock()
+
 			for awaitRel := s.awaitRel.Front(); awaitRel != nil; awaitRel = awaitRel.Next() {
 				if awaitRel, ok := awaitRel.Value.(*awaitRelElem); ok {
 					if now.Sub(awaitRel.at) >= retryInterval {
@@ -844,10 +899,12 @@ func (client *client) redeliver() {
 							},
 							PacketID: awaitRel.pid,
 						}
+
 						client.write(pubrel)
 					}
 				}
 			}
+
 			s.awaitRelMu.Unlock()
 		}
 	}

@@ -115,10 +115,10 @@ Call `server.Stop()` to stop the broker gracefully:
 # Test
 ## Unit Test
 ```
-$ go test -race . && go test -race pkg/packets
+$ go test -race . && go test -race packets
 ```
 ```
-$ cd pkg/packets
+$ cd packets
 $ go test -race .
 ```
 ## Integration Test

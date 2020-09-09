@@ -3,7 +3,7 @@ package trie
 import (
 	"testing"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/danclive/mqtt/subscription"
 	"github.com/stretchr/testify/assert"
 )

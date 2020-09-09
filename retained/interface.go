@@ -1,7 +1,7 @@
 package retained
 
 import (
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 // IterateFn is the callback function used by Iterate()

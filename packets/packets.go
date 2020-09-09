@@ -139,18 +139,20 @@ func NewWriter(w io.Writer) *Writer {
 // If any errors occurs, returns nil, error
 func (r *Reader) ReadPacket() (Packet, error) {
 	first, err := r.bufr.ReadByte()
-
 	if err != nil {
 		return nil, err
 	}
+
 	fh := &FixHeader{PacketType: first >> 4, Flags: first & 15} //设置FixHeader
+
 	length, err := EncodeRemainLength(r.bufr)
 	if err != nil {
 		return nil, err
 	}
+
 	fh.RemainLength = length
-	packet, err := NewPacket(fh, r.bufr)
-	return packet, err
+
+	return NewPacket(fh, r.bufr)
 }
 
 // WritePacket writes the packet bytes to the Writer.

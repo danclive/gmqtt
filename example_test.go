@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"go.uber.org/zap"
 )
 
@@ -36,10 +36,10 @@ func Example() {
 		// WithPlugin(prometheus.New(&http.Server{Addr: ":8082"}, "/metrics")),
 		// add Hook
 		WithHook(Hooks{
-			OnConnect: func(ctx context.Context, client Client) (code uint8) {
+			OnConnect: func(client Client) (code uint8) {
 				return packets.CodeAccepted
 			},
-			OnSubscribe: func(ctx context.Context, client Client, topic packets.Topic) (qos uint8) {
+			OnSubscribe: func(client Client, topic packets.Topic) (qos uint8) {
 				fmt.Println("register onSubscribe callback")
 				return packets.QOS_1
 			},

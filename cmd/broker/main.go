@@ -12,8 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/danclive/mqtt"
-	"github.com/danclive/mqtt/plugin/management"
-	"github.com/danclive/mqtt/plugin/prometheus"
 )
 
 func main() {
@@ -36,10 +34,10 @@ func main() {
 	s := mqtt.NewServer(
 		mqtt.WithTCPListener(ln),
 		mqtt.WithWebsocketServer(ws),
-		mqtt.WithPlugin(management.New(":8081", nil)),
-		mqtt.WithPlugin(prometheus.New(&http.Server{
-			Addr: ":8082",
-		}, "/metrics")),
+		// mqtt.WithPlugin(management.New(":8081", nil)),
+		// mqtt.WithPlugin(prometheus.New(&http.Server{
+		// 	Addr: ":8082",
+		// }, "/metrics")),
 		mqtt.WithLogger(l),
 	)
 

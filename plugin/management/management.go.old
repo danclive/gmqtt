@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/danclive/mqtt"
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 	"github.com/gin-gonic/gin"
 )
 

@@ -117,7 +117,7 @@ mqtt实现了下列钩子方法
 $ go test -race .
 ```
 ```
-$ cd pkg/packets
+$ cd packets
 $ go test -race .
 ```
 ## 集成测试

@@ -1,7 +1,7 @@
 package mqtt
 
 import (
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 // PublishService provides the ability to publish messages to the broker.

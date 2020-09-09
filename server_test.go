@@ -10,7 +10,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/danclive/mqtt/pkg/packets"
+	"github.com/danclive/mqtt/packets"
 )
 
 func TestHooks(t *testing.T) {
@@ -21,35 +21,35 @@ func TestHooks(t *testing.T) {
 
 	var hooksStr string
 	hooks := Hooks{
-		OnAccept: func(ctx context.Context, conn net.Conn) bool {
+		OnAccept: func(conn net.Conn) bool {
 			hooksStr += "Accept"
 			return true
 		},
-		OnConnect: func(ctx context.Context, client Client) (code uint8) {
+		OnConnect: func(client Client) (code uint8) {
 			hooksStr += "OnConnect"
 			return packets.CodeAccepted
 		},
-		OnConnected: func(ctx context.Context, client Client) {
+		OnConnected: func(client Client) {
 			hooksStr += "OnConnected"
 		},
-		OnSessionCreated: func(ctx context.Context, client Client) {
+		OnSessionCreated: func(client Client) {
 			hooksStr += "OnSessionCreated"
 		},
-		OnSubscribe: func(ctx context.Context, client Client, topic packets.Topic) (qos uint8) {
+		OnSubscribe: func(client Client, topic packets.Topic) (qos uint8) {
 			hooksStr += "OnSubscribe"
 			return packets.QOS_1
 		},
-		OnMsgArrived: func(ctx context.Context, client Client, msg packets.Message) (valid bool) {
+		OnMsgArrived: func(client Client, msg packets.Message) (valid bool) {
 			hooksStr += "OnMsgArrived"
 			return true
 		},
-		OnSessionTerminated: func(ctx context.Context, client Client, reason SessionTerminatedReason) {
+		OnSessionTerminated: func(client Client, reason SessionTerminatedReason) {
 			hooksStr += "OnSessionTerminated"
 		},
-		OnClose: func(ctx context.Context, client Client, err error) {
+		OnClose: func(client Client, err error) {
 			hooksStr += "OnClose"
 		},
-		OnStop: func(ctx context.Context) {
+		OnStop: func() {
 			hooksStr += "OnStop"
 		},
 	}
@@ -139,7 +139,7 @@ func TestConnackInvalidCodeInhooksStr(t *testing.T) {
 	srv := NewServer(
 		WithTCPListener(ln),
 		WithHook(Hooks{
-			OnConnect: func(ctx context.Context, client Client) (code uint8) {
+			OnConnect: func(client Client) (code uint8) {
 				return packets.CodeBadUsernameorPsw
 			},
 		}),
@@ -227,7 +227,7 @@ func TestZeroBytesClientId(t *testing.T) {
 func TestRandUUID(t *testing.T) {
 	uuids := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
-		uuids[getRandomUUID()] = struct{}{}
+		uuids[RandomID()] = struct{}{}
 	}
 	if len(uuids) != 100 {
 		t.Fatalf("duplicated ID")

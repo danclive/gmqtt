@@ -11,6 +11,8 @@ github.com/cespare/xxhash/v2 v2.1.1 h1:6MnRN8NT7+YBpUIWxHtefFZOKTAPgGjpQSxqLNn0+
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/danclive/nson-go v0.2.0 h1:4Up7XMcQPR8dOsbmF8ZxwsH+hvP9/icWMJugOItd9sY=
 github.com/danclive/nson-go v0.2.0/go.mod h1:pEmtTkxaXcJXKVEhJYGjT0k2b+77fWacSaXnp9RAEtk=
+github.com/danclive/nson-go v0.3.1 h1:ZNPol1IVmf9UWwgvUxEWCzvZ+yGkADZlFJVkghZCfgI=
+github.com/danclive/nson-go v0.3.1/go.mod h1:L1kLvlMsYMooindbfOBMV33U0S0chCfPyC5g2dimKAQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

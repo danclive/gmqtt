@@ -62,7 +62,7 @@ type Server interface {
 	// PublishService returns the PublishService
 	PublishService() PublishService
 	// Client return the client specified by clientID.
-	Client(clientID string) (Client, bool)
+	Client(clientID string) Client
 	// GetConfig returns the config of the server
 	GetConfig() Config
 	// GetStatsManager returns StatsManager
@@ -654,11 +654,10 @@ func (srv *server) Init(opts ...Options) {
 }
 
 // Client returns the client for given clientID
-func (srv *server) Client(clientID string) (Client, bool) {
+func (srv *server) Client(clientID string) Client {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	client, has := srv.clients[clientID]
-	return client, has
+	return srv.clients[clientID]
 }
 
 func (srv *server) serveTCP(l net.Listener) {
